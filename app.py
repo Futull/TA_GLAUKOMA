@@ -3,6 +3,10 @@ from PIL import Image
 import os
 import cv2
 import numpy as np
+from model_architecture import UNet_SE_LeakyReLU  # OD/OC
+from vessel_architecture import AETUnet  # VESSEL
+import torch
+from torchvision import transforms
 
 # ===================== COVER PAGE ===================== #
 
@@ -12,17 +16,13 @@ def Cover():
     with col1:
         if os.path.exists("assets/logoits.png"):
             st.image("assets/logoits.png", width=80)
-        else:
-            st.write("")
 
     with col2:
         if os.path.exists("assets/logobme.png"):
             st.image("assets/logobme.png", width=80)
-        else:
-            st.write("")
 
     st.title("TUGAS AKHIR")
-    st.header("KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CONVOLUTIONAL NEURAL NETWORK (CNN)")
+    st.header("KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CNN")
     st.subheader("Nadhifatul Fuadah - 5023211053")
     st.markdown("### Dosen Pembimbing 1: Prof. Dr. Tri Arief Sardjono, S.T., M.T")
     st.markdown("### Dosen Pembimbing 2: Nada Fitrieyatul Hikmah, S.T., M.T")
@@ -91,12 +91,13 @@ def apply_median_filter(image, ksize=3):
     channels = cv2.split(image)
     filtered_channels = [cv2.medianBlur(ch, ksize) for ch in channels]
     return cv2.merge(filtered_channels)
-    
+
 def Preprocessing():
     st.title("Preprocessing Steps")
+    global median_img
 
     uploaded_file = st.file_uploader("Upload Fundus Image", type=["png", "jpg", "jpeg"])
-    
+
     if uploaded_file:
         image = Image.open(uploaded_file).convert('RGB')
         img_np = np.array(image)
@@ -110,7 +111,6 @@ def Preprocessing():
             "Median Filter"
         ])
 
-        # Step 1: Resize
         resized = cv2.resize(img_np, (256, 256), interpolation=cv2.INTER_LINEAR)
         st.image(resized, caption="🔵 Resized 256x256")
 
@@ -118,7 +118,6 @@ def Preprocessing():
             st.success("Preprocessing complete.")
             return
 
-        # Step 2: Color Normalization
         avg_r, avg_g, avg_b = 0.5543, 0.3411, 0.1512
         color_norm = color_normalization(resized, avg_r, avg_g, avg_b)
         st.image(color_norm, caption="🟢 Color Normalization")
@@ -127,7 +126,6 @@ def Preprocessing():
             st.success("Preprocessing complete.")
             return
 
-        # Step 3: Gamma Correction
         gamma_img = apply_gamma_correction(color_norm, gamma=1.1)
         st.image(gamma_img, caption="🔴 Gamma Correction 1.1")
 
@@ -135,7 +133,6 @@ def Preprocessing():
             st.success("Preprocessing complete.")
             return
 
-        # Step 4: CLAHE
         clahe_img = apply_clahe_rgb(gamma_img, clip_limit=2.0, tile_grid_size=(12, 12))
         st.image(clahe_img, caption="🟡 CLAHE clip limit 2.0 & tile grid 12x12")
 
@@ -143,21 +140,50 @@ def Preprocessing():
             st.success("Preprocessing complete.")
             return
 
-        # Step 5: Median Filter
         median_img = apply_median_filter(clahe_img, ksize=3)
         st.image(median_img, caption="🟣 Median Filter kernel 3x3")
 
         st.success("Preprocessing complete.")
 
-# ===================== OTHER PAGES ===================== #
+# ===================== SEGMENTATION ===================== #
+
+def segment_image(model, image_np):
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+    ])
+    input_tensor = transform(image_np).unsqueeze(0)
+    with torch.no_grad():
+        output = model(input_tensor)[0]
+        mask = torch.argmax(output, dim=0).numpy().astype(np.uint8)
+    return mask
 
 def Segmentation():
     st.title("Segmentation")
+    global median_img
+
+    if 'median_img' not in globals():
+        st.warning("Please complete preprocessing first.")
+        return
+
     seg_type = st.selectbox("Segmentation Type", ["Optic Disc & Cup", "Blood Vessel"])
+
     if seg_type == "Optic Disc & Cup":
-        st.markdown("Running OD/OC segmentation model...")
-    elif seg_type == "Blood Vessel":
-        st.markdown("Running vessel segmentation model...")
+        model_path = "models/CDR_BEST_fold_model.pt"
+        model = UNet_SE_LeakyReLU(num_classes=3)
+        model.load_state_dict(torch.load(model_path, map_location="cpu"))
+        model.eval()
+        num_classes = 3
+    else:
+        model_path = "models/vessel_best_model.pth"
+        model = AETUnet(in_channels=3, out_channels=2)  
+        model.load_state_dict(torch.load(model_path, map_location="cpu"))
+        model.eval()
+        num_classes = 2
+
+    mask = segment_image(model, median_img)
+    st.image(mask * (255 // max(num_classes - 1, 1)), caption="Segmentation Result", use_container_width=True)
+
+# ===================== OTHER PAGES ===================== #
 
 def FeatureExtraction():
     st.title("Feature Extraction")
