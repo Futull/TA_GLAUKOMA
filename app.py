@@ -1,19 +1,33 @@
 import streamlit as st
 from PIL import Image
+import os
 
 # ============ PAGE FUNCTIONS ============ #
 
 def Cover():
+    # 3 kolom: logo1 | logo2 | kosong (untuk dorong semua ke kiri)
+    col1, col2, col3 = st.columns([1, 1, 6])  # total 8 bagian, kolom 3 untuk kosongkan kanan
+
+    with col1:
+        if os.path.exists("assets/logo_its.png"):
+            st.image("assets/logo_its.png", width=80)
+        else:
+            st.write("")
+
+    with col2:
+        if os.path.exists("assets/logo_bme.png"):
+            st.image("assets/logo_bme.png", width=80)
+        else:
+            st.write("")
+
+    # Judul dan informasi utama
     st.title("TUGAS AKHIR")
     st.header("KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CONVOLUTIONAL NEURAL NETWORK (CNN)")
     st.subheader("Nadhifatul Fuadah - 5023211053")
     st.markdown("### Dosen Pembimbing 1: Dr. Tri Arief Sardjono, S.T., M.T")
     st.markdown("### Dosen Pembimbing 2: Nada Fitrieyatul Hikmah, S.T., M.T")
 
-    st.image("assets/logo_its.png", width=120)
-    st.image("assets/logo_bme.png", width=120)
-
-
+    # Sidebar
     st.sidebar.info(
         "Navigation Instructions:\n"
         "- Go to **Preprocessing** to enhance image quality\n"
@@ -22,6 +36,7 @@ def Cover():
         "- Use **Classification** to predict glaucoma severity\n"
         "- Visit **About Glaucoma** to learn more"
     )
+
 
 def About():
     st.title("About Glaucoma")
