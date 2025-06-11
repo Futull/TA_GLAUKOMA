@@ -91,19 +91,17 @@ def apply_median_filter(image, ksize=3):
     channels = cv2.split(image)
     filtered_channels = [cv2.medianBlur(ch, ksize) for ch in channels]
     return cv2.merge(filtered_channels)
-
 def Preprocessing():
-    st.title("Preprocessing Steps")
-    st.markdown("Upload a fundus image and select a specific preprocessing step from the options.")
+    st.title("Preprocessing Pipeline (Step-by-Step)")
 
     uploaded_file = st.file_uploader("Upload Fundus Image", type=["png", "jpg", "jpeg"])
     
     if uploaded_file:
         image = Image.open(uploaded_file).convert('RGB')
         img_np = np.array(image)
-        st.image(img_np, caption="Original Image", use_column_width=True)
+        st.image(img_np, caption="🟠 Original Image", use_column_width=True)
 
-        step = st.radio("Select Preprocessing Step", [
+        step = st.radio("Select preprocessing step (show up to this stage):", [
             "Resize Image",
             "Color Normalization",
             "Gamma Correction",
@@ -111,39 +109,43 @@ def Preprocessing():
             "Median Filter"
         ])
 
-        processed_img = img_np.copy()
+        # Step 1: Resize
+        resized = cv2.resize(img_np, (256, 256), interpolation=cv2.INTER_LINEAR)
+        st.image(resized, caption="🔵 Resized ")
 
         if step == "Resize Image":
-            resized = cv2.resize(processed_img, (256, 256), interpolation=cv2.INTER_LINEAR)
-            st.image(resized, caption="Resized Image (256x256)")
+            st.success("Preprocessing complete.")
+            return
 
-        elif step == "Color Normalization":
-            resized = cv2.resize(processed_img, (256, 256))
-            avg_r, avg_g, avg_b = 0.5543, 0.3411, 0.1512
-            norm_img = color_normalization(resized, avg_r, avg_g, avg_b)
-            st.image(norm_img, caption="Color Normalization Result")
+        # Step 2: Color Normalization
+        avg_r, avg_g, avg_b = 0.5543, 0.3411, 0.1512
+        color_norm = color_normalization(resized, avg_r, avg_g, avg_b)
+        st.image(color_norm, caption="🟢 Color Normalization ")
 
-        elif step == "Gamma Correction (γ = 1.1)":
-            resized = cv2.resize(processed_img, (256, 256))
-            norm_img = color_normalization(resized, 0.5543, 0.3411, 0.1512)
-            gamma_img = apply_gamma_correction(norm_img, gamma=1.1)
-            st.image(gamma_img, caption="Gamma Correction Result")
+        if step == "Color Normalization":
+            st.success("Preprocessing complete.")
+            return
 
-        elif step == "CLAHE (clip=2.0, tile=12x12)":
-            resized = cv2.resize(processed_img, (256, 256))
-            norm_img = color_normalization(resized, 0.5543, 0.3411, 0.1512)
-            gamma_img = apply_gamma_correction(norm_img, gamma=1.1)
-            clahe_img = apply_clahe_rgb(gamma_img, clip_limit=2.0, tile_grid_size=(12, 12))
-            st.image(clahe_img, caption="CLAHE Result")
+        # Step 3: Gamma Correction
+        gamma_img = apply_gamma_correction(color_norm, gamma=1.1)
+        st.image(gamma_img, caption="🔴 Gamma Correction ")
 
-        elif step == "Median Filter (3x3)":
-            resized = cv2.resize(processed_img, (256, 256))
-            norm_img = color_normalization(resized, 0.5543, 0.3411, 0.1512)
-            gamma_img = apply_gamma_correction(norm_img, gamma=1.1)
-            clahe_img = apply_clahe_rgb(gamma_img, clip_limit=2.0, tile_grid_size=(12, 12))
-            median_img = apply_median_filter(clahe_img, ksize=3)
-            st.image(median_img, caption="Median Filter Result")
-            
+        if step == "Gamma Correction":
+            st.success("Preprocessing complete.")
+            return
+
+        # Step 4: CLAHE
+        clahe_img = apply_clahe_rgb(gamma_img, clip_limit=2.0, tile_grid_size=(12, 12))
+        st.image(clahe_img, caption="🟡 CLAHE ")
+
+        if step == "CLAHE":
+            st.success("Preprocessing complete.")
+            return
+
+        # Step 5: Median Filter
+        median_img = apply_median_filter(clahe_img, ksize=3)
+        st.image(median_img, caption="🟣 Median Filter ")
+
         st.success("Preprocessing complete.")
 
 # ===================== OTHER PAGES ===================== #
