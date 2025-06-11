@@ -3,6 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 from torchvision.models import resnet34, ResNet34_Weights
+import random
+
+seed = 42
+random.seed(seed)
+torch.manual_seed(seed)
 
 # Set seed
 seed = 42
