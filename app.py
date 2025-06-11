@@ -1,11 +1,13 @@
 import streamlit as st
 from PIL import Image
 import os
+import cv2
+import numpy as np
 
-# ============ PAGE FUNCTIONS ============ #
+# ===================== COVER PAGE ===================== #
 
 def Cover():
-    col1, col2, col3 = st.columns([1, 1, 6])  # total 8 bagian, kolom 3 untuk kosongkan kanan
+    col1, col2, col3 = st.columns([1, 1, 6])
 
     with col1:
         if os.path.exists("assets/logoits.png"):
@@ -19,14 +21,12 @@ def Cover():
         else:
             st.write("")
 
-    # Judul dan informasi utama
     st.title("TUGAS AKHIR")
     st.header("KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CONVOLUTIONAL NEURAL NETWORK (CNN)")
     st.subheader("Nadhifatul Fuadah - 5023211053")
     st.markdown("### Dosen Pembimbing 1: Dr. Tri Arief Sardjono, S.T., M.T")
     st.markdown("### Dosen Pembimbing 2: Nada Fitrieyatul Hikmah, S.T., M.T")
 
-    # Sidebar
     st.sidebar.info(
         "Navigation Instructions:\n"
         "- Go to **Preprocessing** to enhance image quality\n"
@@ -36,6 +36,7 @@ def Cover():
         "- Visit **About Glaucoma** to learn more"
     )
 
+# ===================== ABOUT PAGE ===================== #
 
 def About():
     st.title("About Glaucoma")
@@ -57,31 +58,86 @@ def About():
     - Vascular narrowing
     """)
 
+# ===================== PREPROCESSING PAGE ===================== #
+
+def color_normalization(image, avg_r, avg_g, avg_b):
+    img_float = image.astype(np.float32) / 255.0
+    mean_r = np.mean(img_float[:, :, 0])
+    if mean_r == 0:
+        mean_r = 1e-6
+    R_norm = (img_float[:, :, 0] / mean_r) * avg_r
+    G_norm = (img_float[:, :, 1] / mean_r) * avg_g
+    B_norm = (img_float[:, :, 2] / mean_r) * avg_b
+    normalized_img = np.stack([
+        np.clip(R_norm, 0, 1),
+        np.clip(G_norm, 0, 1),
+        np.clip(B_norm, 0, 1)], axis=2) * 255
+    return normalized_img.astype(np.uint8)
+
+def apply_gamma_correction(image, gamma=1.1):
+    normalized = image / 255.0
+    corrected = np.power(normalized, 1.0 / gamma)
+    return np.clip(corrected * 255.0, 0, 255).astype(np.uint8)
+
+def apply_clahe_rgb(image, clip_limit=2.0, tile_grid_size=(12, 12)):
+    lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+    cl = clahe.apply(l)
+    merged = cv2.merge((cl, a, b))
+    return cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
+
+def apply_median_filter(image, ksize=3):
+    channels = cv2.split(image)
+    filtered_channels = [cv2.medianBlur(ch, ksize) for ch in channels]
+    return cv2.merge(filtered_channels)
+
 def Preprocessing():
-    st.title("Preprocessing")
-    st.markdown("Upload a fundus image to apply preprocessing (CLAHE, normalization, etc.)")
-    uploaded_file = st.file_uploader("Upload fundus image", type=["jpg", "jpeg", "png"])
+    st.title("Preprocessing Pipeline")
+    st.markdown("Upload a fundus image")
+
+    uploaded_file = st.file_uploader("Upload Fundus Image", type=["png", "jpg", "jpeg"])
     if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Original Fundus Image", use_column_width=True)
-        st.success("Image uploaded. You can now apply preprocessing.")
+        image = Image.open(uploaded_file).convert('RGB')
+        img_np = np.array(image)
+        st.image(img_np, caption="Original Image", use_column_width=True)
+
+        # Step 1: Resize
+        resized = cv2.resize(img_np, (256, 256), interpolation=cv2.INTER_LINEAR)
+        st.image(resized, caption="Resized (256x256)")
+
+        # Step 2: Color Normalization
+        avg_r, avg_g, avg_b = 0.5543, 0.3411, 0.1512  
+        color_norm = color_normalization(resized, avg_r, avg_g, avg_b)
+        st.image(color_norm, caption="Color Normalization")
+
+        # Step 3: Gamma Correction
+        gamma_img = apply_gamma_correction(color_norm, gamma=1.1)
+        st.image(gamma_img, caption="Gamma Correction (γ = 1.1)")
+
+        # Step 4: CLAHE
+        clahe_img = apply_clahe_rgb(gamma_img, clip_limit=2.0, tile_grid_size=(12, 12))
+        st.image(clahe_img, caption="CLAHE (clip=2.0, tile=12x12)")
+
+        # Step 5: Median Filter
+        median_img = apply_median_filter(clahe_img, ksize=3)
+        st.image(median_img, caption="Median Filter (3x3)")
+
+        st.success("Preprocessing complete.")
+
+# ===================== OTHER PAGES ===================== #
 
 def Segmentation():
     st.title("Segmentation")
-    st.markdown("Select segmentation model:")
     seg_type = st.selectbox("Segmentation Type", ["Optic Disc & Cup", "Blood Vessel"])
-
     if seg_type == "Optic Disc & Cup":
         st.markdown("Running OD/OC segmentation model...")
-        # You can place your code or button here
     elif seg_type == "Blood Vessel":
         st.markdown("Running vessel segmentation model...")
-        # You can place your code or button here
 
 def FeatureExtraction():
     st.title("Feature Extraction")
     feat_type = st.selectbox("Feature Source", ["OD/OC Segmentation", "Vessel Segmentation"])
-
     if feat_type == "OD/OC Segmentation":
         st.markdown("Extracting CDR, disc/cup area, eccentricity, solidity, etc.")
     elif feat_type == "Vessel Segmentation":
@@ -95,7 +151,7 @@ def Evaluation():
     st.title("Model Evaluation")
     st.markdown("Display confusion matrix, accuracy, sensitivity, specificity, and other metrics.")
 
-# ============ SIDEBAR SELECTOR ============ #
+# ===================== PAGE ROUTING ===================== #
 
 st.sidebar.title("Navigation")
 page = st.sidebar.selectbox("Go to Page", [
@@ -107,8 +163,6 @@ page = st.sidebar.selectbox("Go to Page", [
     "Classification", 
     "Evaluation"
 ])
-
-# ============ PAGE ROUTER ============ #
 
 if page == "Cover":
     Cover()
