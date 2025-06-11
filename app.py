@@ -161,19 +161,27 @@ def Segmentation():
     seg_type = st.radio("Select segmentations to run:", ["Optic Disc & Cup", "Blood Vessel"])
     if st.button("🔁 Load Model & Run Segmentation"):
         with st.spinner("Processing... please wait"):
-            img_tensor = transforms.ToTensor()(image).unsqueeze(0)
+            preprocess = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean=(0.485, 0.456, 0.406),
+                                     std=(0.229, 0.224, 0.225))
+            ])
+            img_tensor = preprocess(image).unsqueeze(0)
+
             if seg_type == "Optic Disc & Cup":
                 model = UNet_SE_LeakyReLU(num_classes=3)
                 model.load_state_dict(torch.load("models/CDR_BEST_fold_model.pt", map_location="cpu"))
                 model.eval()
                 with torch.no_grad():
                     output = model(img_tensor)
+                    output = torch.softmax(output, dim=1)
                     mask = output.squeeze().numpy()
                     mask = np.argmax(mask, axis=0).astype(np.uint8)
+                    print("Unique mask values:", np.unique(mask))
                     combined = np.zeros((*mask.shape, 3), dtype=np.uint8)
                     combined[mask == 1] = [255, 0, 0]  # Cup in Red
                     combined[mask == 2] = [0, 255, 0]  # Disc in Green
-                    st.image(combined, caption="OD/OC Mask Result (Visual Overlay)", use_column_width=True)
+                    st.image(combined, caption="OD/OC Mask Result (Visual Overlay)", use_container_width=True)
                     st.session_state["od_oc_mask"] = mask
                     st.session_state["cup_mask"] = (mask == 1).astype(np.uint8) * 255
                     st.session_state["disc_mask"] = (mask == 2).astype(np.uint8) * 255
@@ -185,7 +193,7 @@ def Segmentation():
                     output = model(img_tensor)
                     mask = output.squeeze().numpy()
                     mask = (mask > 0.5).astype(np.uint8) * 255
-                    st.image(mask, caption="Vessel Mask Result", clamp=True)
+                    st.image(mask, caption="Vessel Mask Result", clamp=True, use_container_width=True)
                     st.session_state["vessel_mask"] = mask
         st.success("Segmentation completed.")
 
