@@ -1,9 +1,10 @@
 streamlit
 numpy
 pandas
-opencv-python
+opencv-python-headless
 matplotlib
 scikit-learn
 Pillow
 torch
 torchvision
+
