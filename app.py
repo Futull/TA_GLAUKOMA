@@ -10,7 +10,9 @@ def Cover():
     st.markdown("### Dosen Pembimbing 1: Dr. Tri Arief Sardjono, S.T., M.T")
     st.markdown("### Dosen Pembimbing 2: Nada Fitrieyatul Hikmah, S.T., M.T")
 
-    st.image("assets/logo.png", width=100)  # optional image/logo
+    st.image("assets/logo_itsss.png", width=120)
+    st.image("assets/logo bme.png", width=120)
+
 
     st.sidebar.info(
         "Navigation Instructions:\n"
