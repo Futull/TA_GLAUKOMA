@@ -91,6 +91,7 @@ def apply_median_filter(image, ksize=3):
     channels = cv2.split(image)
     filtered_channels = [cv2.medianBlur(ch, ksize) for ch in channels]
     return cv2.merge(filtered_channels)
+    
 def Preprocessing():
     st.title("Preprocessing Steps")
 
