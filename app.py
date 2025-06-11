@@ -179,7 +179,7 @@ def Segmentation():
                     mask = np.argmax(mask, axis=0).astype(np.uint8)
                     print("Unique mask values:", np.unique(mask))
                     combined = np.zeros((*mask.shape, 3), dtype=np.uint8)
-                    combined[mask == 1] = [200, 200, 200]  # Cup in Light Gray
+                    combined[mask == 1] = [120, 120, 120]  # Cup in Light Gray
                     combined[mask == 2] = [255, 255, 255]  # Disc in White
                     col1, col2 = st.columns(2)
                     with col1:
