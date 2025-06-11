@@ -2,7 +2,7 @@ import streamlit as st
 from PIL import Image
 
 st.set_page_config(
-    page_title="Glaucoma Severity Classification",
+    page_title="TUGAS AKHIR",
     layout="wide"
 )
 
@@ -38,11 +38,11 @@ page = st.sidebar.radio("Select Section", [
 if page == "Home":
     st.title("Final Project")
     st.markdown("""
-    ## Glaucoma Severity Classification Based on Morphological Features from Retinal Fundus Images Using CNN
-    **Name**: [Your Name]  
-    **Student ID**: 073119400000X  
-    **Advisor 1**: Dr. Tri Arief Sardjono, S.T., M.T  
-    **Advisor 2**: Nada Fitrieyatul Hikmah, S.T., M.T
+    ## KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CONVOLUTIONAL NEURAL NETWORK (CNN)
+    **Name**: [NADHIFATUL FUADAH]  
+    **NRP** : 5023211053  
+    **Dosen Pembimbing 1**: Dr. Tri Arief Sardjono, S.T., M.T  
+    **Dosen Pembimbing 2**: Nada Fitrieyatul Hikmah, S.T., M.T
     """)
 
 # About Glaucoma Page
@@ -104,8 +104,7 @@ elif page == "Feature Extraction":
 
 # Classification Page
 elif page == "Classification":
-    st.header("Classification")
-    st.markdown("Run CNN classifier based on the extracted features.")
+    st.header("Classification with Support Vector Machine")
     # Add model call and result display
 
 # Evaluation Page
