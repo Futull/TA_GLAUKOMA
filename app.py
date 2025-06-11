@@ -92,7 +92,7 @@ def apply_median_filter(image, ksize=3):
     filtered_channels = [cv2.medianBlur(ch, ksize) for ch in channels]
     return cv2.merge(filtered_channels)
 def Preprocessing():
-    st.title("Preprocessing Pipeline (Step-by-Step)")
+    st.title("Preprocessing Steps")
 
     uploaded_file = st.file_uploader("Upload Fundus Image", type=["png", "jpg", "jpeg"])
     
@@ -101,7 +101,7 @@ def Preprocessing():
         img_np = np.array(image)
         st.image(img_np, caption="🟠 Original Image", use_column_width=True)
 
-        step = st.radio("Select preprocessing step (show up to this stage):", [
+        step = st.radio("Select preprocessing step:", [
             "Resize Image",
             "Color Normalization",
             "Gamma Correction",
@@ -111,7 +111,7 @@ def Preprocessing():
 
         # Step 1: Resize
         resized = cv2.resize(img_np, (256, 256), interpolation=cv2.INTER_LINEAR)
-        st.image(resized, caption="🔵 Resized ")
+        st.image(resized, caption="🔵 Resized 256x256, use_column_width=True ")
 
         if step == "Resize Image":
             st.success("Preprocessing complete.")
@@ -120,7 +120,7 @@ def Preprocessing():
         # Step 2: Color Normalization
         avg_r, avg_g, avg_b = 0.5543, 0.3411, 0.1512
         color_norm = color_normalization(resized, avg_r, avg_g, avg_b)
-        st.image(color_norm, caption="🟢 Color Normalization ")
+        st.image(color_norm, caption="🟢 Color Normalization, use_column_width=True ")
 
         if step == "Color Normalization":
             st.success("Preprocessing complete.")
@@ -128,7 +128,7 @@ def Preprocessing():
 
         # Step 3: Gamma Correction
         gamma_img = apply_gamma_correction(color_norm, gamma=1.1)
-        st.image(gamma_img, caption="🔴 Gamma Correction ")
+        st.image(gamma_img, caption="🔴 Gamma Correction 1.1, use_column_width=True")
 
         if step == "Gamma Correction":
             st.success("Preprocessing complete.")
@@ -136,7 +136,7 @@ def Preprocessing():
 
         # Step 4: CLAHE
         clahe_img = apply_clahe_rgb(gamma_img, clip_limit=2.0, tile_grid_size=(12, 12))
-        st.image(clahe_img, caption="🟡 CLAHE ")
+        st.image(clahe_img, caption="🟡 CLAHE clip limit 2.0 & tile grid 12x12, use_column_width=True")
 
         if step == "CLAHE":
             st.success("Preprocessing complete.")
@@ -144,7 +144,7 @@ def Preprocessing():
 
         # Step 5: Median Filter
         median_img = apply_median_filter(clahe_img, ksize=3)
-        st.image(median_img, caption="🟣 Median Filter ")
+        st.image(median_img, caption="🟣 Median Filter kernel 3x3, use_column_width=True")
 
         st.success("Preprocessing complete.")
 
