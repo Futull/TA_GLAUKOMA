@@ -151,7 +151,6 @@ def Preprocessing():
         st.success("Preprocessing complete.")
 
 # ===================== SEGMENTATION ===================== #
-
 def Segmentation():
     st.title("Segmentation")
     image = st.session_state.get("preprocessed_image", None)
@@ -171,15 +170,13 @@ def Segmentation():
                     output = model(img_tensor)
                     mask = output.squeeze().numpy()
                     mask = np.argmax(mask, axis=0).astype(np.uint8)
-                    cup_mask = (mask == 1).astype(np.uint8) * 255
-                    disc_mask = (mask == 2).astype(np.uint8) * 255
-                    combined = np.zeros_like(mask, dtype=np.uint8)
-                    combined[mask == 1] = 127  # Cup
-                    combined[mask == 2] = 255  # Disc
-                    st.image(combined, caption="OD/OC Mask Result (Single Channel)", clamp=True)
-                    st.session_state["od_oc_mask"] = combined
-                    st.session_state["cup_mask"] = cup_mask
-                    st.session_state["disc_mask"] = disc_mask
+                    combined = np.zeros((*mask.shape, 3), dtype=np.uint8)
+                    combined[mask == 1] = [255, 0, 0]  # Cup in Red
+                    combined[mask == 2] = [0, 255, 0]  # Disc in Green
+                    st.image(combined, caption="OD/OC Mask Result (Visual Overlay)", use_column_width=True)
+                    st.session_state["od_oc_mask"] = mask
+                    st.session_state["cup_mask"] = (mask == 1).astype(np.uint8) * 255
+                    st.session_state["disc_mask"] = (mask == 2).astype(np.uint8) * 255
             else:
                 model = AETUnet()
                 model.load_state_dict(torch.load("models/vessel_best_model.pth", map_location="cpu"))
