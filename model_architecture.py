@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 from torchvision.models import resnet34, ResNet34_Weights
 import random
+import numpy as np
 
 # Set seed
 seed = 42
