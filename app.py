@@ -179,9 +179,13 @@ def Segmentation():
                     mask = np.argmax(mask, axis=0).astype(np.uint8)
                     print("Unique mask values:", np.unique(mask))
                     combined = np.zeros((*mask.shape, 3), dtype=np.uint8)
-                    combined[mask == 1] = [255, 0, 0]  # Cup in Red
-                    combined[mask == 2] = [0, 255, 0]  # Disc in Green
-                    st.image(combined, caption="OD/OC Mask Result (Visual Overlay)", use_container_width=True)
+                    combined[mask == 1] = [200, 200, 200]  # Cup in Light Gray
+                    combined[mask == 2] = [255, 255, 255]  # Disc in White
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.image(image, caption="Original Image", use_container_width=True)
+                    with col2:
+                        st.image(combined, caption="OD/OC Mask Overlay (Gray/White)", use_container_width=True)
                     st.session_state["od_oc_mask"] = mask
                     st.session_state["cup_mask"] = (mask == 1).astype(np.uint8) * 255
                     st.session_state["disc_mask"] = (mask == 2).astype(np.uint8) * 255
