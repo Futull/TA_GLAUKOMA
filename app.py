@@ -5,18 +5,17 @@ import os
 # ============ PAGE FUNCTIONS ============ #
 
 def Cover():
-    # 3 kolom: logo1 | logo2 | kosong (untuk dorong semua ke kiri)
     col1, col2, col3 = st.columns([1, 1, 6])  # total 8 bagian, kolom 3 untuk kosongkan kanan
 
     with col1:
-        if os.path.exists("assets/logo_its.png"):
-            st.image("assets/logo_its.png", width=80)
+        if os.path.exists("assets/logoits.png"):
+            st.image("assets/logoits.png", width=80)
         else:
             st.write("")
 
     with col2:
-        if os.path.exists("assets/logo_bme.png"):
-            st.image("assets/logo_bme.png", width=80)
+        if os.path.exists("assets/logobme.png"):
+            st.image("assets/logobme.png", width=80)
         else:
             st.write("")
 
