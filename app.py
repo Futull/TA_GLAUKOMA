@@ -158,7 +158,8 @@ def Segmentation():
         st.warning("Please complete preprocessing first.")
         return
 
-    seg_type = st.radio("Select segmentations to run:", ["Optic Disc & Cup", "Blood Vessel"])
+    seg_type = st.radio("Select segmentation type:", ["Optic Disc & Cup", "Blood Vessel"])
+
     if st.button("🔁 Load Model & Run Segmentation"):
         with st.spinner("Processing... please wait"):
             preprocess = transforms.Compose([
@@ -178,16 +179,12 @@ def Segmentation():
                     mask = output.squeeze().numpy()
                     mask = np.argmax(mask, axis=0).astype(np.uint8)
                     combined = np.zeros((*mask.shape, 3), dtype=np.uint8)
-                    combined[mask == 1] = [100, 100, 100]  # Cup in darker gray
-                    combined[mask == 2] = [255, 255, 255]  # Disc in white
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.image(image, caption="Original Image", use_container_width=True)
-                    with col2:
-                        st.image(combined, caption="Segmentation Result", use_container_width=True)
+                    combined[mask == 1] = [100, 100, 100]     # Cup - dark gray
+                    combined[mask == 2] = [255, 255, 255]  # Disc - white
                     st.session_state["od_oc_mask"] = mask
                     st.session_state["cup_mask"] = (mask == 1).astype(np.uint8) * 255
                     st.session_state["disc_mask"] = (mask == 2).astype(np.uint8) * 255
+                    st.session_state["od_oc_segmented"] = combined
 
             elif seg_type == "Blood Vessel":
                 model = AETUnet()
@@ -198,13 +195,19 @@ def Segmentation():
                     mask = output.squeeze().numpy()
                     mask = (mask > 0.5).astype(np.uint8) * 255
                     st.session_state["vessel_mask"] = mask
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.image(image, caption="Original Image", use_container_width=True)
-                    with col2:
-                        st.image(mask, caption="Vessel Segmentation Result", clamp=True, use_container_width=True)
+                    st.session_state["vessel_segmented"] = mask
 
         st.success("Segmentation completed.")
+
+    if "od_oc_segmented" in st.session_state:
+        col1, col2 = st.columns(2)
+        col1.image(image, caption="Original Image", use_container_width=True)
+        col2.image(st.session_state["od_oc_segmented"], caption="OD&OC Segmentation Result", use_container_width=True)
+
+    if "vessel_segmented" in st.session_state:
+        col1, col2 = st.columns(2)
+        col1.image(image, caption="Original Image", use_container_width=True)
+        col2.image(st.session_state["vessel_segmented"], caption="Blood Vessel Segmentation Result", clamp=True, use_container_width=True)
 
 # ===================== OTHER PAGES ===================== #
 
