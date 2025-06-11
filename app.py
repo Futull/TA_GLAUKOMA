@@ -164,7 +164,7 @@ def Segmentation():
         with st.spinner("Processing... please wait"):
             img_tensor = transforms.ToTensor()(image).unsqueeze(0)
             if seg_type == "Optic Disc & Cup":
-                model = UNet_SE_LeakyReLU(in_channels=3, out_channels=3)
+                model = UNet_SE_LeakyReLU(num_classes=3)
                 model.load_state_dict(torch.load("models/CDR_BEST_fold_model.pt", map_location="cpu"))
             else:
                 model = AETUnet(in_channels=3, out_channels=1)
