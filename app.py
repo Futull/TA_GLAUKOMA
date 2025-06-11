@@ -24,7 +24,7 @@ def Cover():
     st.title("TUGAS AKHIR")
     st.header("KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CONVOLUTIONAL NEURAL NETWORK (CNN)")
     st.subheader("Nadhifatul Fuadah - 5023211053")
-    st.markdown("### Dosen Pembimbing 1: Dr. Tri Arief Sardjono, S.T., M.T")
+    st.markdown("### Dosen Pembimbing 1: Prof. Dr. Tri Arief Sardjono, S.T., M.T")
     st.markdown("### Dosen Pembimbing 2: Nada Fitrieyatul Hikmah, S.T., M.T")
 
     st.sidebar.info(
