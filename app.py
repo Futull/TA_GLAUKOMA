@@ -1,31 +1,89 @@
 import streamlit as st
 from PIL import Image
 
-st.set_page_config(
-    page_title="TUGAS AKHIR",
-    layout="wide"
-)
+# ============ PAGE FUNCTIONS ============ #
 
-# Styling
-st.markdown("""
-    <style>
-    .sidebar .sidebar-content { padding: 2rem 1rem; }
-    .block-container { padding: 2rem 2rem; }
-    h1, h2, h3 { color: #1c1c1c; }
-    .stButton>button {
-        background-color: #004d99;
-        color: white;
-        font-weight: 500;
-        border-radius: 5px;
-        padding: 0.5em 1em;
-    }
-    </style>
-""", unsafe_allow_html=True)
+def Cover():
+    st.title("TUGAS AKHIR")
+    st.header("KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CONVOLUTIONAL NEURAL NETWORK (CNN)")
+    st.subheader("Nadhifatul Fuadah - 5023211053")
+    st.markdown("### Dosen Pembimbing 1: Dr. Tri Arief Sardjono, S.T., M.T")
+    st.markdown("### Dosen Pembimbing 2: Nada Fitrieyatul Hikmah, S.T., M.T")
 
-# Sidebar
+    st.image("assets/logo.png", width=100)  # optional image/logo
+
+    st.sidebar.info(
+        "Navigation Instructions:\n"
+        "- Go to **Preprocessing** to enhance image quality\n"
+        "- Go to **Segmentation** to choose between OD/OC or Vessel\n"
+        "- Go to **Feature Extraction** to analyze CDR, vessel tortuosity, etc.\n"
+        "- Use **Classification** to predict glaucoma severity\n"
+        "- Visit **About Glaucoma** to learn more"
+    )
+
+def About():
+    st.title("About Glaucoma")
+    st.markdown("""
+    Glaucoma is a disease that damages the optic nerve due to high intraocular pressure.  
+    It can lead to permanent blindness if untreated.
+
+    **Severity Stages**:
+    - Normal
+    - Mild
+    - Moderate
+    - Severe
+
+    **Key Morphological Indicators**:
+    - Cup-to-Disc Ratio (CDR)
+    - Optic disc deformation
+    - Vessel tortuosity
+    - Bifurcation patterns
+    - Vascular narrowing
+    """)
+
+def Preprocessing():
+    st.title("Preprocessing")
+    st.markdown("Upload a fundus image to apply preprocessing (CLAHE, normalization, etc.)")
+    uploaded_file = st.file_uploader("Upload fundus image", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Original Fundus Image", use_column_width=True)
+        st.success("Image uploaded. You can now apply preprocessing.")
+
+def Segmentation():
+    st.title("Segmentation")
+    st.markdown("Select segmentation model:")
+    seg_type = st.selectbox("Segmentation Type", ["Optic Disc & Cup", "Blood Vessel"])
+
+    if seg_type == "Optic Disc & Cup":
+        st.markdown("Running OD/OC segmentation model...")
+        # You can place your code or button here
+    elif seg_type == "Blood Vessel":
+        st.markdown("Running vessel segmentation model...")
+        # You can place your code or button here
+
+def FeatureExtraction():
+    st.title("Feature Extraction")
+    feat_type = st.selectbox("Feature Source", ["OD/OC Segmentation", "Vessel Segmentation"])
+
+    if feat_type == "OD/OC Segmentation":
+        st.markdown("Extracting CDR, disc/cup area, eccentricity, solidity, etc.")
+    elif feat_type == "Vessel Segmentation":
+        st.markdown("Extracting vessel features: tortuosity, skeleton length, bifurcation points, etc.")
+
+def Classification():
+    st.title("Glaucoma Classification")
+    st.markdown("Use the trained CNN model to classify the image into one of the glaucoma severity levels.")
+
+def Evaluation():
+    st.title("Model Evaluation")
+    st.markdown("Display confusion matrix, accuracy, sensitivity, specificity, and other metrics.")
+
+# ============ SIDEBAR SELECTOR ============ #
+
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Select Section", [
-    "Home", 
+page = st.sidebar.selectbox("Go to Page", [
+    "Cover", 
     "About Glaucoma", 
     "Preprocessing", 
     "Segmentation", 
@@ -34,81 +92,19 @@ page = st.sidebar.radio("Select Section", [
     "Evaluation"
 ])
 
-# Home Page
-if page == "Home":
-    st.title("Final Project")
-    st.markdown("""
-    ## KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CONVOLUTIONAL NEURAL NETWORK (CNN)
-    **Name**: [NADHIFATUL FUADAH]  
-    **NRP** : 5023211053  
-    **Dosen Pembimbing 1**: Dr. Tri Arief Sardjono, S.T., M.T  
-    **Dosen Pembimbing 2**: Nada Fitrieyatul Hikmah, S.T., M.T
-    """)
+# ============ PAGE ROUTER ============ #
 
-# About Glaucoma Page
+if page == "Cover":
+    Cover()
 elif page == "About Glaucoma":
-    st.title("About Glaucoma")
-    st.markdown("""
-    **What is Glaucoma?**  
-    Glaucoma is a group of eye conditions that damage the optic nerve, often due to high intraocular pressure. It is one of the leading causes of irreversible blindness.
-
-    **Severity Stages:**
-    - **Normal**: No optic nerve damage.
-    - **Mild**: Slight cupping and early signs.
-    - **Moderate**: Noticeable damage and vision loss.
-    - **Severe**: Advanced damage with high blindness risk.
-
-    **Why Morphological Analysis?**  
-    Morphological changes in the optic disc and blood vessels offer strong indicators for glaucoma severity, such as:
-    - Cup-to-disc ratio (CDR)
-    - Blood vessel tortuosity
-    - Bifurcation patterns
-    - Vessel skeletonization
-
-    This system integrates these to build a deep learning-based classification tool.
-    """)
-
-# Preprocessing Page
+    About()
 elif page == "Preprocessing":
-    st.header("Preprocessing")
-    st.markdown("Upload a retinal fundus image to perform normalization, CLAHE, resizing, etc.")
-    uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
-        st.success("Ready for preprocessing.")
-
-# Segmentation Page
+    Preprocessing()
 elif page == "Segmentation":
-    st.header("Segmentation")
-    seg_option = st.radio("Choose segmentation type:", ["Optic Disc & Cup", "Blood Vessel"])
-    
-    if seg_option == "Optic Disc & Cup":
-        st.markdown("Segmentation of OD/OC using model 1...")
-        # Add upload & predict logic for OD/OC
-    elif seg_option == "Blood Vessel":
-        st.markdown("Segmentation of vessels using model 2...")
-        # Add upload & predict logic for vessels
-
-# Feature Extraction Page
+    Segmentation()
 elif page == "Feature Extraction":
-    st.header("Feature Extraction")
-    feat_option = st.radio("Choose feature type:", ["OD/OC Features", "Vessel Features"])
-
-    if feat_option == "OD/OC Features":
-        st.markdown("Extracting features such as CDR, area, eccentricity, solidity, etc.")
-        # Add logic or visual here
-    elif feat_option == "Vessel Features":
-        st.markdown("Extracting vessel-based features like tortuosity, skeleton length, bifurcation points, etc.")
-        # Add logic or visual here
-
-# Classification Page
+    FeatureExtraction()
 elif page == "Classification":
-    st.header("Classification with Support Vector Machine")
-    # Add model call and result display
-
-# Evaluation Page
+    Classification()
 elif page == "Evaluation":
-    st.header("Evaluation and Results")
-    st.markdown("Show model metrics such as confusion matrix, accuracy, F1-score, sensitivity, etc.")
-
+    Evaluation()
