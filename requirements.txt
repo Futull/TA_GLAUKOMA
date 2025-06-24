@@ -4,6 +4,7 @@ pandas
 opencv-python-headless
 matplotlib
 scikit-learn
+scikit-image
 Pillow
 torch
 torchvision
