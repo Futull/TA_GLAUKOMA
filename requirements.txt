@@ -3,6 +3,7 @@ numpy
 pandas
 opencv-python-headless
 matplotlib
+torchsummary
 scikit-learn
 scikit-image
 Pillow
