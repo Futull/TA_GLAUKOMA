@@ -1,6 +1,7 @@
 import streamlit as st
 from PIL import Image
 import os
+from skimage.measure import label, regionprops
 import cv2
 import numpy as np
 from model_architecture import Build_UNet  # OD/OC
@@ -64,26 +65,55 @@ def About():
 
 # ===================== PREPROCESSING PAGE ===================== #
 
-def color_normalization(image, avg_r, avg_g, avg_b):
-    img_float = image.astype(np.float32) / 255.0
-    mean_r = np.mean(img_float[:, :, 0])
-    if mean_r == 0:
-        mean_r = 1e-6
-    R_norm = (img_float[:, :, 0] / mean_r) * avg_r
-    G_norm = (img_float[:, :, 1] / mean_r) * avg_g
-    B_norm = (img_float[:, :, 2] / mean_r) * avg_b
-    normalized_img = np.stack([
-        np.clip(R_norm, 0, 1),
-        np.clip(G_norm, 0, 1),
-        np.clip(B_norm, 0, 1)], axis=2) * 255
-    return normalized_img.astype(np.uint8)
+# Fungsi untuk mendeteksi dan memotong area disc optik pada citra RGB tanpa mask
+def detect_and_crop_od(image, margin_ratio=1.0):
+    # Mengubah citra ke grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
+    # Menggunakan thresholding untuk mendeteksi area yang terang (biasanya disc optik lebih terang)
+    _, thresholded = cv2.threshold(gray, 90, 255, cv2.THRESH_BINARY)
+
+    # Menyaring kontur dan mencari region-props
+    labeled = label(thresholded)
+    props = regionprops(labeled)
+
+    if len(props) == 0:
+        raise ValueError("Tidak ada disc optik yang terdeteksi.")
+
+    # Mengambil region terbesar (biasanya disc optik)
+    largest_region = max(props, key=lambda x: x.area)
+    y1, x1, y2, x2 = largest_region.bbox
+    center_x = (x1 + x2) // 2
+    center_y = (y1 + y2) // 2
+    box_size = int(max(x2 - x1, y2 - y1) * margin_ratio)
+
+    h, w = image.shape[:2]
+    x_start = max(center_x - box_size // 2, 0)
+    x_end = min(center_x + box_size // 2, w)
+    y_start = max(center_y - box_size // 2, 0)
+    y_end = min(center_y + box_size // 2, h)
+
+    img_crop = image[y_start:y_end, x_start:x_end]
+    return img_crop
+
+# Fungsi Resize (ubah ukuran gambar)
+def resize_image(image, target_size=(256, 256)):
+    return cv2.resize(image, target_size, interpolation=cv2.INTER_LINEAR)
+
+# Fungsi Sharpening (Unsharp Masking)
+def unsharp_mask(image, blur_ksize=5, strength=1.0):
+    blur = cv2.GaussianBlur(image, (blur_ksize, blur_ksize), 0)
+    mask = cv2.addWeighted(image, 1 + strength, blur, -strength, 0)
+    return np.clip(mask, 0, 255).astype(np.uint8)
+
+# Fungsi Gamma Correction
 def apply_gamma_correction(image, gamma=1.1):
     normalized = image / 255.0
     corrected = np.power(normalized, 1.0 / gamma)
     return np.clip(corrected * 255.0, 0, 255).astype(np.uint8)
 
-def apply_clahe_rgb(image, clip_limit=2.0, tile_grid_size=(12, 12)):
+# Fungsi CLAHE
+def apply_clahe(image, clip_limit=2.0, tile_grid_size=(12, 12)):
     lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
@@ -91,11 +121,73 @@ def apply_clahe_rgb(image, clip_limit=2.0, tile_grid_size=(12, 12)):
     merged = cv2.merge((cl, a, b))
     return cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
 
+# Fungsi Median Filter
 def apply_median_filter(image, ksize=3):
-    channels = cv2.split(image)
-    filtered_channels = [cv2.medianBlur(ch, ksize) for ch in channels]
-    return cv2.merge(filtered_channels)
+    return cv2.medianBlur(image, ksize)
 
+# Fungsi Preprocessing untuk OD/OC Segmentation
+def preprocess_od_oc(image, margin_ratio=1.0):
+    # Crop around ONH
+    cropped_image = detect_and_crop_od(image, margin_ratio=margin_ratio)
+
+    # Resize image
+    resized_image = resize_image(cropped_image, target_size=(256, 256))
+    
+    # Sharpening
+    sharpened_image = unsharp_mask(resized_image, blur_ksize=5, strength=1.5)
+
+    # Color Normalization
+    avg_r, avg_g, avg_b = 0.9601, 0.6374, 0.3408
+    color_normalized_image = color_normalization(sharpened_image, avg_r, avg_g, avg_b)
+
+    # Gamma Correction
+    gamma_corrected_image = apply_gamma_correction(color_normalized_image, gamma=1.1)
+
+    # CLAHE
+    clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(12, 12))
+
+    # Median Filter
+    final_image = apply_median_filter(clahe_image, ksize=3)
+
+    return final_image
+
+# Fungsi untuk color normalization (per channel)
+def color_normalization(image, avg_r, avg_g, avg_b):
+    img = image.astype(np.float32) / 255.0  # to [0,1]
+
+    mean_r = np.mean(img[:, :, 0])
+    mean_g = np.mean(img[:, :, 1])
+    mean_b = np.mean(img[:, :, 2])
+
+    img[:, :, 0] *= (avg_r / (mean_r + 1e-6))
+    img[:, :, 1] *= (avg_g / (mean_g + 1e-6))
+    img[:, :, 2] *= (avg_b / (mean_b + 1e-6))
+
+    img = np.clip(img, 0, 1)
+    return (img * 255).astype(np.uint8)
+
+# ===================== Fungsi Preprocessing untuk Vessel Segmentation ===================== #
+
+# Fungsi Preprocessing untuk Vessel Segmentation
+def preprocess_vessel(image, margin_ratio=1.0):
+    # Resize image (256x256)
+    resized_image = resize_image(image, target_size=(256, 256))
+
+    # Extract Green Channel
+    green_channel = resized_image[:, :, 1]  # Ambil channel hijau (Green)
+
+    # Gamma Correction pada Green Channel
+    gamma_corrected_image = apply_gamma_correction(green_channel, gamma=1.1)
+
+    # CLAHE pada Green Channel
+    clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(12, 12))
+
+    # Median Filter
+    final_image = apply_median_filter(clahe_image, ksize=3)
+
+    return final_image
+
+# ===================== Fungsi Streamlit ===================== #
 def Preprocessing():
     st.title("Preprocessing Steps")
     uploaded_file = st.file_uploader("Upload Fundus Image", type=["png", "jpg", "jpeg"])
@@ -105,50 +197,31 @@ def Preprocessing():
         img_np = np.array(image)
         st.image(img_np, caption="🟠 Original Image", use_container_width=True)
 
-        step = st.radio("Select preprocessing step:", [
-            "Resize Image",
-            "Color Normalization",
-            "Gamma Correction",
-            "CLAHE",
-            "Median Filter"])
+        # Pilih jenis preprocessing
+        task = st.radio("Select Preprocessing Task", ["OD/OC Segmentation", "Vessel Segmentation"])
 
-        resized = cv2.resize(img_np, (256, 256), interpolation=cv2.INTER_LINEAR)
-        st.image(resized, caption="🔵 Resized 256x256")
+        # Tombol untuk preprocessing OD/OC
+        if task == "OD/OC Segmentation":
+            if st.button("Apply Preprocessing for OD/OC Segmentation"):
+                try:
+                    processed_image = preprocess_od_oc(img_np, margin_ratio=1.0)  # Proses OD/OC
+                    st.image(processed_image, caption="🟣 Processed Image (OD/OC Cropped)")
+                    st.success("Preprocessing complete.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
-        if step == "Resize Image":
-            st.session_state["preprocessed_image"] = resized
-            st.success("Preprocessing complete.")
-            return
+        # Tombol untuk preprocessing Vessel
+        elif task == "Vessel Segmentation":
+            if st.button("Apply Preprocessing for Vessel Segmentation"):
+                try:
+                    processed_image = preprocess_vessel(img_np, margin_ratio=1.0)  # Proses Vessel
+                    st.image(processed_image, caption="🟢 Processed Image (Vessel Cropped)")
+                    st.success("Preprocessing complete.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
-        avg_r, avg_g, avg_b = 0.5543, 0.3411, 0.1512
-        color_norm = color_normalization(resized, avg_r, avg_g, avg_b)
-        st.image(color_norm, caption="🟢 Color Normalization")
-
-        if step == "Color Normalization":
-            st.session_state["preprocessed_image"] = color_norm
-            st.success("Preprocessing complete.")
-            return
-
-        gamma_img = apply_gamma_correction(color_norm, gamma=1.1)
-        st.image(gamma_img, caption="🔴 Gamma Correction 1.1")
-
-        if step == "Gamma Correction":
-            st.session_state["preprocessed_image"] = gamma_img
-            st.success("Preprocessing complete.")
-            return
-
-        clahe_img = apply_clahe_rgb(gamma_img, clip_limit=2.0, tile_grid_size=(12, 12))
-        st.image(clahe_img, caption="🟡 CLAHE clip limit 2.0 & tile grid 12x12")
-
-        if step == "CLAHE":
-            st.session_state["preprocessed_image"] = clahe_img
-            st.success("Preprocessing complete.")
-            return
-
-        median_img = apply_median_filter(clahe_img, ksize=3)
-        st.image(median_img, caption="🟣 Median Filter kernel 3x3")
-        st.session_state["preprocessed_image"] = median_img
-        st.success("Preprocessing complete.")
+    else:
+        st.warning("Please upload an image to begin preprocessing.")
 
 # ===================== SEGMENTATION ===================== #
 def Segmentation():
