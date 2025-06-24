@@ -70,8 +70,8 @@ def detect_and_crop_od(image, margin_ratio=1.0):
     # Mengubah citra ke grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
-    # Menggunakan thresholding untuk mendeteksi area yang terang (biasanya disc optik lebih terang)
-    _, thresholded = cv2.threshold(gray, 90, 255, cv2.THRESH_BINARY)
+    # Menyesuaikan threshold menggunakan Otsu's binarization agar lebih adaptif
+    _, thresholded = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # Menyaring kontur dan mencari region-props
     labeled = label(thresholded)
@@ -129,7 +129,7 @@ def apply_median_filter(image, ksize=3):
 def preprocess_od_oc(image, margin_ratio=1.0):
     # Crop around ONH
     cropped_image = detect_and_crop_od(image, margin_ratio=margin_ratio)
-
+    
     # Resize image
     resized_image = resize_image(cropped_image, target_size=(256, 256))
     
