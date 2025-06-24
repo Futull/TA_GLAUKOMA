@@ -2,159 +2,162 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-from torchvision.models import resnet34, ResNet34_Weights
-import random
-import numpy as np
+from torchvision.models.resnet import ResNet34_Weights
+from torchsummary import summary
 
-# Set seed
-seed = 42
-random.seed(seed)
-np.random.seed(seed)
-torch.manual_seed(seed)
-torch.cuda.manual_seed(seed)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+# ===== Helper =====
+def replace_relu_with_leakyrelu(module):
+    for name, child in module.named_children():
+        if isinstance(child, nn.ReLU):
+            setattr(module, name, nn.LeakyReLU(negative_slope=0.01))
+        else:
+            replace_relu_with_leakyrelu(child)
 
-class SEBlock(nn.Module):
-    def __init__(self, channels, reduction=16):
-        super().__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channels, channels // reduction, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channels // reduction, channels, bias=False),
-            nn.Sigmoid()
-        )
-    def forward(self, x):
-        b, c, _, _ = x.size()
-        y = self.avg_pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
-        return x * y.expand_as(x)
+# ===== Encoder =====
+resnet = models.resnet34(weights=ResNet34_Weights["IMAGENET1K_V1"])
+for name, param in resnet.named_parameters():
+    if 'layer3' in name or 'layer4' in name:
+        param.requires_grad = True  # allow fine-tuning
+
+
+replace_relu_with_leakyrelu(resnet)
 
 class Encoder(nn.Module):
-    def __init__(self, dropout_rate=0.3, leaky_relu_slope=0.01):
+    def __init__(self):
         super().__init__()
-        # Load pretrained ResNet34
-        resnet = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
-
-        # Aktifkan semua parameter untuk di-train
-        for param in resnet.parameters():
-            param.requires_grad = True
-
-        # Layer 1: conv1 + bn1 + activation + maxpool + layer1 + SEBlock + Dropout2d
         self.layer1 = nn.Sequential(
             resnet.conv1,
             resnet.bn1,
-            nn.LeakyReLU(leaky_relu_slope, inplace=True),
-            resnet.maxpool,
-            resnet.layer1,
-            SEBlock(64),
-            nn.Dropout2d(dropout_rate)
+            nn.LeakyReLU(),
+            resnet.layer1
         )
-
-        # Layer 2: layer2 + SEBlock + Dropout2d
-        self.layer2 = nn.Sequential(
-            resnet.layer2,
-            SEBlock(128),
-            nn.Dropout2d(dropout_rate)
-        )
-
-        # Layer 3: layer3 + SEBlock + Dropout2d
-        self.layer3 = nn.Sequential(
-            resnet.layer3,
-            SEBlock(256),
-            nn.Dropout2d(dropout_rate)
-        )
-
-        # Layer 4: layer4 + SEBlock + Dropout2d
-        self.layer4 = nn.Sequential(
-            resnet.layer4,
-            SEBlock(512),
-            nn.Dropout2d(dropout_rate)
-        )
+        self.layer2 = resnet.layer2
+        self.layer3 = resnet.layer3
+        self.layer4 = resnet.layer4
 
     def forward(self, x):
-        x1 = self.layer1(x)  # output channels 64
-        x2 = self.layer2(x1) # output channels 128
-        x3 = self.layer3(x2) # output channels 256
-        x4 = self.layer4(x3) # output channels 512
+        x1 = self.layer1(x)
+        x2 = self.layer2(x1)
+        x3 = self.layer3(x2)
+        x4 = self.layer4(x3)
         return x1, x2, x3, x4
-        
-# Middle convolution dengan BatchNorm2d
+
+# ===== MiddleConv with Dilated Conv + Dropout =====
 class MiddleConv(nn.Module):
-    def __init__(self, in_channels, out_channels, leaky_relu_slope=0.01):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
-        self.act1 = nn.LeakyReLU(leaky_relu_slope, inplace=True)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
-        self.act2 = nn.LeakyReLU(leaky_relu_slope, inplace=True)
-        self.bn = nn.BatchNorm2d(out_channels)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=2, dilation=2)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu1 = nn.LeakyReLU()
+        self.dropout = nn.Dropout2d(0.3)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=4, dilation=4)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.relu2 = nn.LeakyReLU()
 
     def forward(self, x):
-        x = self.act1(self.conv1(x))
-        x = self.act2(self.conv2(x))
-        return self.bn(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.dropout(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        return x
 
-# Decoder block dengan BatchNorm2d
-class DecBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, leaky_relu_slope=0.01):
+# ===== BasicBlock for decoder with Dropout + Residual Connection =====
+class BasicBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.upconv = nn.ConvTranspose2d(in_channels, out_channels, 2, stride=2)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu1 = nn.LeakyReLU()
+        self.dropout = nn.Dropout2d(0.4)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.dropout2 = nn.Dropout2d(0.4)
+        self.relu2 = nn.LeakyReLU()
+
+
+        # Residual connection - hanya jika channel berbeda
+        self.shortcut = nn.Sequential()
+        if in_channels != out_channels:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(out_channels)
+            )
+
+    def forward(self, x):
+        residual = self.shortcut(x)
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu1(out)
+        out = self.dropout(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.dropout2(out)
+
+        # Add residual connection
+        out = out + residual
+        out = self.relu2(out)
+
+        return out
+
+# ===== Decoder Block =====
+class Dec_Block(nn.Module):
+    def __init__(self, in_channels, skip_channels, out_channels):
+        super().__init__()
+        self.upconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+        self.relu = nn.LeakyReLU()
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = nn.LeakyReLU(leaky_relu_slope, inplace=True)
-        self.conv = nn.Conv2d(out_channels + in_channels, out_channels, 3, padding=1)
-        self.se = SEBlock(out_channels)
-        self.drop = nn.Dropout2d(0.5)
-        self.residual_conv = nn.Conv2d(out_channels, out_channels, 1)
+        self.conv = BasicBlock(out_channels + skip_channels, out_channels)
 
     def forward(self, x, skip):
-        x = self.act(self.bn(self.upconv(x)))
-        skip = F.interpolate(skip, size=x.size()[2:], mode='bilinear', align_corners=True)
-        x_in = torch.cat([x, skip], dim=1)
-        x_out = self.se(self.conv(x_in))
-        x_out = self.drop(x_out)
-        return self.act(x_out + self.residual_conv(x_out))  # Residual connection
+        x = self.upconv(x)
+        x = self.relu(x)
+        x = self.bn(x)
+        skip = F.interpolate(skip, size=x.shape[2:], mode='bilinear', align_corners=True)
+        x = torch.cat([x, skip], dim=1)
+        x = self.conv(x)
+        return x
 
-# Full U-Net model dengan BatchNorm2d di final layer juga
-class UNet_SE_LeakyReLU(nn.Module):
-    def __init__(self, num_classes=3, dropout_rate=0.5, leaky_relu_slope=0.01):
+# ===== MergeLayer (MINIMALIS) =====
+class MergeLayer(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.encoder = Encoder(dropout_rate, leaky_relu_slope)
-        self.bridge = MiddleConv(512, 512, leaky_relu_slope)
-        self.dec1 = DecBlock(512, 256, leaky_relu_slope)
-        self.dec2 = DecBlock(256, 128, leaky_relu_slope)
-        self.dec3 = DecBlock(128, 64, leaky_relu_slope)
-        self.dec4 = DecBlock(64, 32, leaky_relu_slope)
-        self.upsample = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True)
-        self.final = nn.Sequential(
-            nn.Conv2d(32 + 3, 32, 3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(leaky_relu_slope, inplace=True),
-            nn.Dropout2d(dropout_rate),
-            nn.Conv2d(32, num_classes, 1)
-        )
-        self._init_weights()
 
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-                nn.init.kaiming_normal_(m.weight, nonlinearity='leaky_relu')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
+    def forward(self, x, input_img):
+        input_resized = F.interpolate(input_img, size=x.shape[2:], mode='bilinear', align_corners=True)
+        return torch.cat([x, input_resized], dim=1)  # Output: [B, 64+3=67, H, W]
+
+# ===== Final Model =====
+class Build_UNet(nn.Module):
+    def __init__(self, num_classes=3):  # Ganti sesuai jumlah kelas
+        super().__init__()
+        self.encoder = Encoder()
+        self.mc1 = MiddleConv(512, 1024)
+        self.mc2 = MiddleConv(1024, 512)
+        self.decoder1 = Dec_Block(in_channels=512, skip_channels=512, out_channels=512)
+        self.decoder2 = Dec_Block(512, 256, 256)
+        self.decoder3 = Dec_Block(256, 128, 128)
+        self.decoder4 = Dec_Block(128, 64, 64)
+        self.merge = MergeLayer()
+        self.segmentation = nn.Conv2d(67, num_classes, kernel_size=1)
 
     def forward(self, x):
-        input_skip = x
         x1, x2, x3, x4 = self.encoder(x)
-        bridge = self.bridge(x4)
-        d1 = self.dec1(bridge, x4)
-        d2 = self.dec2(d1, x3)
-        d3 = self.dec3(d2, x2)
-        d4 = self.dec4(d3, x1)
-        upsampled = self.upsample(d4)
-        input_resized = F.interpolate(input_skip, size=(256, 256), mode='bilinear', align_corners=True)
-        combined = torch.cat([upsampled, input_resized], dim=1)
-        return self.final(combined)
+        mc1 = self.mc1(x4)
+        mc2 = self.mc2(mc1)
+        d1 = self.decoder1(mc2, x4)
+        d2 = self.decoder2(d1, x3)
+        d3 = self.decoder3(d2, x2)
+        d4 = self.decoder4(d3, x1)
+        merged = self.merge(d4, x)  # merge dengan input asli
+        out = self.segmentation(merged)  # output: (B, num_classes, H, W)
+        return out
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = Build_UNet(num_classes=3).to(device)
+summary(model, (3, 256, 256))
+total_params = sum(p.numel() for p in model.parameters())
+print(f"Total parameters: {total_params:,}")
