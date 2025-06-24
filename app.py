@@ -3,8 +3,8 @@ from PIL import Image
 import os
 import cv2
 import numpy as np
-from model_architecture import UNet_SE_LeakyReLU  # OD/OC
-from vessel_architecture import AETUnet  # VESSEL
+from model_architecture import Build_UNet  # OD/OC
+from vessel_architecture import Build_UNet # VESSEL
 import torch
 from torchvision import transforms
 
