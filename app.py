@@ -84,7 +84,7 @@ def crop_optic_disc_improved(image, crop_factor=1.5):
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
         
         # Use threshold to get bright regions
-        threshold_value = max_val * 0.75
+        threshold_value = max_val * 0.85
         _, bright_mask = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
         
         # Morphological operations
