@@ -67,7 +67,7 @@ def About():
 
 # ===================== PREPROCESSING FUNCTIONS ===================== #
 
-def crop_optic_disc_improved(image, crop_factor=2.5):
+def crop_optic_disc_improved(image, crop_factor=2.0):
     """
     Crop around the ONH with proper margins
     """
@@ -84,7 +84,7 @@ def crop_optic_disc_improved(image, crop_factor=2.5):
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
         
         # Use threshold to get bright regions
-        threshold_value = max_val * 0.80
+        threshold_value = max_val * 0.90
         _, bright_mask = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
         
         # Morphological operations
@@ -228,7 +228,7 @@ def preprocess_od_oc_stepwise(image):
     
     # Step 1: Crop ONH region
     try:
-        cropped_image, detection_info = crop_optic_disc_improved(image, crop_factor=1.8)
+        cropped_image, detection_info = crop_optic_disc_improved(image, crop_factor=1.5)
         results['step1_cropped'] = cropped_image
         results['detection_info'] = detection_info
     except Exception as e:
