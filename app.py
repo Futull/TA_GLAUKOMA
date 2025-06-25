@@ -2,7 +2,7 @@ import streamlit as st
 from PIL import Image
 import os 
 from skimage.measure import label, regionprops
-from skimage.morphology import disk, opening, closing
+from skimage.morphology import disk, opening, closing 
 from skimage.filters import gaussian
 import cv2
 import numpy as np 
