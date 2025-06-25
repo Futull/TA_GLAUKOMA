@@ -491,13 +491,13 @@ def main():
     # Route to appropriate page
     if page == "Cover":
         Cover()
-    elif page == "Preprocessing":
+    elif page == "1.Preprocessing":
         Preprocessing()
-    elif page == "Segmentation":
+    elif page == "2.Segmentation":
         Segmentation()
-    elif page == "Feature Extraction":
+    elif page == "3.Feature Extraction":
         FeatureExtraction()
-    elif page == "Classification":
+    elif page == "4.Classification":
         Classification()
 
 if __name__ == "__main__":
