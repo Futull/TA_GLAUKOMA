@@ -403,7 +403,7 @@ def load_od_oc_model():
     """Load OD/OC segmentation model"""
     try:
         model = Build_UNet()
-        model.load_state_dict(torch.load('fix_model_odoc.pt', map_location='cpu'))
+        model.load_state_dict(torch.load('models/fix_model_odoc.pt', map_location='cpu'))
         model.eval()
         return model
     except Exception as e:
@@ -415,7 +415,7 @@ def load_vessel_model():
     """Load vessel segmentation model"""
     try:
         model = Build_UNet_Vessel()
-        model.load_state_dict(torch.load('fix_model_vessel.pt', map_location='cpu'))
+        model.load_state_dict(torch.load('models/fix_model_vessel.pt', map_location='cpu'))
         model.eval()
         return model
     except Exception as e:
