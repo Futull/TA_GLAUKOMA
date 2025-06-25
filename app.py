@@ -174,7 +174,7 @@ def detect_optic_disc_template_matching(image):
         
         return contour_points.reshape(-1, 1, 2).astype(np.int32)
 
-def crop_optic_disc_improved(image, crop_factor=2.5):
+def crop_optic_disc_improved(image, crop_factor=1.5):
     """
     Crop around the ONH with proper margins - BACK TO WORKING ALGORITHM but with better margins
     """
