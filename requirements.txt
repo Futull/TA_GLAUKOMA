@@ -9,4 +9,4 @@ scikit-image
 Pillow
 torch
 torchvision
-
+scipy
