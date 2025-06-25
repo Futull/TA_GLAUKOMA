@@ -312,28 +312,28 @@ def Preprocessing():
                             st.image(img_np, caption="Original")
                         
                         with col2:
-                            st.image(results['step1_cropped'], caption="1. ONH Crop")
+                            st.image(results['step1_cropped'], caption="1.ONH Crop")
                         
                         with col3:
-                            st.image(results['step2_resized'], caption="2. Resized 256 x 256")
+                            st.image(results['step2_resized'], caption="2.Resized 256 x 256")
                         
                         with col4:
-                            st.image(results['step3_sharpened'], caption="3. Sharpening")
+                            st.image(results['step3_sharpened'], caption="3.Sharpening")
                         
                         # Second row
                         col1, col2, col3, col4 = st.columns(4)
                         
                         with col1:
-                            st.image(results['step4_color_norm'], caption="4. RGB Color Normalization")
+                            st.image(results['step4_color_norm'], caption="4.RGB Color Normalization")
                         
                         with col2:
-                            st.image(results['step5_gamma'], caption="5. Gamma Correct")
+                            st.image(results['step5_gamma'], caption="5.Gamma Correct")
                         
                         with col3:
-                            st.image(results['step6_clahe'], caption="6. CLAHE")
+                            st.image(results['step6_clahe'], caption="6.CLAHE")
                         
                         with col4:
-                            st.image(results['step7_final'], caption="7. Median Filter")
+                            st.image(results['step7_final'], caption="7.Median Filter")
                         
                         st.success("✅ OD/OC preprocessing completed!")
                         
