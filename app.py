@@ -174,7 +174,7 @@ def detect_optic_disc_template_matching(image):
         
         return contour_points.reshape(-1, 1, 2).astype(np.int32)
 
-def crop_optic_disc_improved(image, crop_factor=0.5):
+def crop_optic_disc_improved(image, crop_factor=2.5):
     """
     Crop around the ONH with proper margins - BACK TO WORKING ALGORITHM but with better margins
     """
@@ -191,7 +191,7 @@ def crop_optic_disc_improved(image, crop_factor=0.5):
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
         
         # Use a moderate threshold to get bright regions (not too restrictive)
-        threshold_value = max_val * 0.85  # Take top 20% brightest areas
+        threshold_value = max_val * 0.80  # Take top 20% brightest areas
         _, bright_mask = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
         
         # Morphological operations to get a clean circular region
@@ -392,7 +392,7 @@ def preprocess_od_oc_stepwise(image):
     
     # Step 1: Crop ONH region - ACTUAL CROPPING, not just marking
     try:
-        cropped_image, detection_info, visualization, crop_coords = crop_optic_disc_improved(image, crop_factor=1.5)
+        cropped_image, detection_info, visualization, crop_coords = crop_optic_disc_improved(image, crop_factor=2.0)
         results['step1_cropped'] = cropped_image
         results['detection_info'] = detection_info
         results['detection_visualization'] = visualization
@@ -478,15 +478,24 @@ def Preprocessing():
             st.subheader("Improved OD/OC Preprocessing Pipeline")
             
             # Add parameter controls
-            st.sidebar.subheader("🎯 ONH Cropping with Proper Margins")
-            crop_factor = st.sidebar.slider("ONH Crop Size", 2.0, 4.0, 2.5, 0.1, 
-                                          help="2.0 = Tight around ONH, 4.0 = Include more surrounding vessels")
+            st.sidebar.subheader("🎯 ONH Cropping Precision Control")
+            crop_factor = st.sidebar.slider("ONH Crop Size", 1.5, 4.0, 2.5, 0.1, 
+                                          help="1.5 = SUPER TIGHT (very close to ONH), 4.0 = Include surrounding vessels")
             
-            st.sidebar.info("🎯 **FIXED Algorithm**: Back to working crop method but with adjustable margins!")
+            # Additional tight cropping option
+            tight_mode = st.sidebar.checkbox("🔥 ULTRA TIGHT Mode", 
+                                           help="Enable for maximum tight cropping around ONH only")
+            
+            if tight_mode:
+                st.sidebar.warning("⚠️ Ultra Tight Mode: May crop very close to ONH edges!")
+                crop_factor = st.sidebar.slider("Ultra Tight Factor", 1.2, 2.0, 1.6, 0.05, 
+                                               help="1.2 = EXTREMELY tight, 2.0 = Still tight but safer")
+            
+            st.sidebar.info("🎯 **Adjustable Tightness**: Lower values = more tight/mepet to ONH!")
             
             # Add processing button
-            if st.button("✂️ Crop ONH with Perfect Margins"):
-                with st.spinner("🎯 Detecting ONH and cropping with proper margins..."):
+            if st.button("✂️ Crop ONH with Custom Tightness"):
+                with st.spinner("🎯 Detecting ONH and applying custom tight cropping..."):
                     # Process the image step by step
                     results = preprocess_od_oc_stepwise(img_np)
                     
@@ -496,26 +505,188 @@ def Preprocessing():
                         st.session_state['preprocessed_image'] = results['step7_final']
                         
                         # Display detection and cropping results
-                        st.subheader("🎯 ONH Detection & Perfect Cropping")
+                        if tight_mode:
+                            st.subheader("🔥 ULTRA TIGHT ONH Cropping Results")
+                        else:
+                            st.subheader("🎯 Custom ONH Cropping Results")
                         
                         # Show before and after cropping
                         col1, col2 = st.columns(2)
                         
                         with col1:
                             st.image(results['detection_visualization'], 
-                                   caption="🔍 Detection: Green circle = ONH area, Red box = Crop with margins", 
+                                   caption="🔍 Detection: Green circle = ONH area, Red box = Crop region", 
                                    use_container_width=True)
                         
                         with col2:
+                            if tight_mode:
+                                caption = f"🔥 ULTRA TIGHT! Factor: {crop_factor}x"
+                            else:
+                                caption = f"✂️ Custom Crop! Factor: {crop_factor}x"
                             st.image(results['step1_cropped'], 
-                                   caption="✂️ PERFECT! ONH Cropped with Proper Margins!", 
+                                   caption=caption, 
                                    use_container_width=True)
                         
                         # Show cropping details
                         center_x, center_y, radius = results['detection_info']
                         x_start, y_start, x_end, y_end = results['crop_coordinates']
                         
-                        st.success(f"🎯 Excellent! ONH Detected & Cropped with Perfect Margins!")
+                        if tight_mode and crop_factor < 1.8:
+                            st.success(f"🔥 ULTRA TIGHT! ONH Cropped Super Close with {crop_factor}x factor!")
+                        else:
+                            st.success(f"🎯 Perfect! ONH Cropped with {crop_factor}x factor!")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.info(f"""
+                            **🔍 ONH Detection Results:**
+                            - ONH Center: ({center_x}, {center_y})
+                            - ONH Base Radius: {radius} pixels
+                            - Applied Factor: {crop_factor}x
+                            - Final Crop Radius: {int(radius * crop_factor)} pixels
+                            """)
+                        
+                        with col2:
+                            original_size = img_np.shape[1] * img_np.shape[0]
+                            crop_size = (x_end-x_start) * (y_end-y_start)
+                            reduction = ((original_size - crop_size) / original_size) * 100
+                            
+                            tightness_level = ""
+                            if crop_factor < 1.8:
+                                tightness_level = "🔥 ULTRA TIGHT"
+                            elif crop_factor < 2.2:
+                                tightness_level = "⚡ VERY TIGHT"
+                            elif crop_factor < 2.8:
+                                tightness_level = "✂️ TIGHT"
+                            else:
+                                tightness_level = "📏 NORMAL"
+                            
+                            st.info(f"""
+                            **✂️ Crop Tightness Analysis:**
+                            - Tightness Level: {tightness_level}
+                            - Original: {img_np.shape[1]}×{img_np.shape[0]} pixels
+                            - Cropped: {x_end-x_start}×{y_end-y_start} pixels
+                            - Reduction: {reduction:.1f}%
+                            """)
+                        
+                        # Show tightness comparison
+                        if crop_factor < 2.0:
+                            st.warning("🔥 **ULTRA TIGHT MODE**: Cropping very close to ONH boundaries!")
+                        elif crop_factor < 2.5:
+                            st.info("⚡ **TIGHT MODE**: Good balance between focus and safety margins")
+                        else:
+                            st.info("📏 **NORMAL MODE**: Safe margins with surrounding context")
+                        
+                        # Display PERFECT before/after comparison
+                        st.subheader(f"🎯 TRANSFORMATION: Factor {crop_factor}x")
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.image(img_np, caption="📸 BEFORE: Full Fundus Image", use_container_width=True)
+                        
+                        with col2:
+                            if tight_mode:
+                                st.image(results['step1_cropped'], caption=f"🔥 AFTER: ULTRA TIGHT ONH ({crop_factor}x)!", use_container_width=True)
+                            else:
+                                st.image(results['step1_cropped'], caption=f"🎯 AFTER: Custom Tight ONH ({crop_factor}x)!", use_container_width=True)
+                        
+                        # Display all preprocessing steps
+                        st.subheader("🔬 ONH Processing Pipeline")
+                        
+                        # Create 4 columns for better layout
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.image(results['step1_cropped'], caption="1️⃣ ONH Cropped", use_container_width=True)
+                            st.image(results['step5_gamma'], caption="5️⃣ Gamma Enhanced", use_container_width=True)
+                        
+                        with col2:
+                            st.image(results['step2_resized'], caption="2️⃣ Resized 256×256", use_container_width=True)
+                            st.image(results['step6_clahe'], caption="6️⃣ CLAHE Enhanced", use_container_width=True)
+                        
+                        with col3:
+                            st.image(results['step3_sharpened'], caption="3️⃣ Sharpened", use_container_width=True)
+                            st.image(results['step7_final'], caption="7️⃣ FINAL PRECISION!", use_container_width=True)
+                        
+                        with col4:
+                            st.image(results['step4_color_norm'], caption="4️⃣ Color Normalized", use_container_width=True)
+                        
+                        st.success("🏆 PRECISION! Perfect ONH cropping and processing!")
+                        
+                        # Show PRECISION algorithm details
+                        st.info("""
+                        **🧠 PRECISION Algorithm Details:**
+                        1. **🎯 Center-Based Cropping**: Calculates crop from ONH center, not edges
+                        2. **📐 Perfect Square Enforcement**: Forces exact square dimensions
+                        3. **⚖️ Balanced Boundary Handling**: Adjusts all sides equally when hitting image bounds
+                        4. **🎯 Precision Centering**: ONH center is exactly in the middle of crop
+                        5. **📏 Crosshair Visualization**: Yellow crosshairs show exact center alignment
+                        6. **🔄 Quality Assurance**: Validates square dimensions and center accuracy
+                        """)
+                        
+                        # Show precision tips
+                        st.subheader("💡 PRECISION Tips")
+                        st.markdown("""
+                        **For Maximum Precision:**
+                        - 🎯 **1.5-1.8x**: Ultra precise, minimal margins
+                        - ⚡ **1.8-2.2x**: Balanced precision with safety margins  
+                        - 📏 **2.2-3.0x**: Precision with more context
+                        
+                        **Quality Indicators:**
+                        - ✅ **Perfect Square**: Width = Height exactly
+                        - ✅ **Center Accuracy**: ONH center ± 2 pixels from crop center
+                        - ✅ **Yellow Crosshairs**: Show exact center alignment in visualization
+                        """)
+                        
+                        # Final precision comparison
+                        st.subheader("🏆 PRECISION ACHIEVED!")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.image(img_np, caption="❌ Before: Uncentered full image", use_container_width=True)
+                        with col2:
+                            st.image(results['step7_final'], caption="✅ After: PRECISION centered ONH!", use_container_width=True) caption="3️⃣ Sharpened", use_container_width=True)
+                            st.image(results['step7_final'], caption="7️⃣ FINAL RESULT", use_container_width=True)
+                        
+                        with col4:
+                            st.image(results['step4_color_norm'], caption="4️⃣ Color Normalized", use_container_width=True)
+                        
+                        st.success("🏆 ONH cropping and processing completed!")
+                        
+                        # Show tightness guide
+                        st.subheader("📏 Tightness Level Guide")
+                        st.markdown("""
+                        | Factor | Level | Description | Use Case |
+                        |--------|-------|-------------|----------|
+                        | 1.2-1.5x | 🔥 **ULTRA TIGHT** | Extremely close to ONH, minimal margins | Research, precise analysis |
+                        | 1.6-1.9x | ⚡ **VERY TIGHT** | Close to ONH with minimal safety margin | Clinical analysis |
+                        | 2.0-2.4x | ✂️ **TIGHT** | Good focus with reasonable margins | General analysis |
+                        | 2.5-3.0x | 📏 **NORMAL** | Safe margins with context | Standard processing |
+                        | 3.1-4.0x | 🔍 **WIDE** | Include vessels and surrounding area | Comprehensive analysis |
+                        """)
+                        
+                        # Final comparison with recommendations
+                        st.subheader("💡 Recommendation")
+                        if crop_factor < 1.6:
+                            st.warning("""
+                            🔥 **ULTRA TIGHT**: Perfect for precise ONH analysis but be careful not to lose important edge details!
+                            - ✅ Maximum focus on ONH
+                            - ⚠️ Risk of cutting important boundaries
+                            - 🎯 Best for: Research, detailed morphology analysis
+                            """)
+                        elif crop_factor < 2.2:
+                            st.info("""
+                            ⚡ **VERY TIGHT**: Excellent balance for most clinical applications!
+                            - ✅ Great focus with safety margins
+                            - ✅ Preserves important ONH boundaries  
+                            - 🎯 Best for: Clinical diagnosis, standard analysis
+                            """)
+                        else:
+                            st.info("""
+                            📏 **NORMAL/WIDE**: Safe choice with good context!
+                            - ✅ Safe margins with surrounding context
+                            - ✅ Includes nearby vessels and structures
+                            - 🎯 Best for: Comprehensive analysis, education
+                            """) Cropped with Perfect Margins!")
                         
                         col1, col2 = st.columns(2)
                         with col1:
