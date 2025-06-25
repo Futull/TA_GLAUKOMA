@@ -475,87 +475,101 @@ def predict_vessel(model, image):
 def Segmentation():
     st.title("Segmentation")
     
-    if 'task_type' not in st.session_state:
+    # Check if any preprocessing has been completed
+    has_od_oc = 'preprocessed_image' in st.session_state
+    has_vessel = 'vessel_preprocessed' in st.session_state
+    
+    if not has_od_oc and not has_vessel:
         st.warning("⚠ Please complete preprocessing first.")
         return
     
-    task_type = st.session_state['task_type']
+    # Let user choose which segmentation to perform
+    available_tasks = []
+    if has_od_oc:
+        available_tasks.append("OD/OC Segmentation")
+    if has_vessel:
+        available_tasks.append("Vessel Segmentation")
     
-    if task_type == 'OD/OC':
+    if len(available_tasks) == 1:
+        selected_task = available_tasks[0]
+        st.info(f"Available task: {selected_task}")
+    else:
+        selected_task = st.selectbox("Select Segmentation Task", available_tasks)
+    
+    if selected_task == "OD/OC Segmentation":
         st.subheader("OD/OC Segmentation")
         
-        if 'preprocessed_image' in st.session_state:
-            preprocessed_img = st.session_state['preprocessed_image']
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.image(preprocessed_img, caption="Preprocessed Image")
-            
-            if st.button("Run OD/OC Segmentation"):
-                with st.spinner("Loading model and running segmentation..."):
-                    model = load_od_oc_model()
-                    
-                    if model is not None:
-                        prediction = predict_od_oc(model, preprocessed_img)
-                        
-                        # Convert prediction to displayable format
-                        if len(prediction.shape) == 3:
-                            od_mask = (prediction[0] > 0.5).astype(np.uint8) * 255
-                            oc_mask = (prediction[1] > 0.5).astype(np.uint8) * 255
-                            
-                            with col2:
-                                st.image(od_mask, caption="OD Segmentation")
-                            
-                            col3, col4 = st.columns(2)
-                            with col3:
-                                st.image(oc_mask, caption="OC Segmentation")
-                            
-                            # Save results
-                            st.session_state['od_mask'] = od_mask
-                            st.session_state['oc_mask'] = oc_mask
-                            
-                            st.success("✅ OD/OC segmentation completed!")
-                        else:
-                            mask = (prediction > 0.5).astype(np.uint8) * 255
-                            with col2:
-                                st.image(mask, caption="Segmentation Result")
-                            st.session_state['seg_mask'] = mask
-                            st.success("✅ Segmentation completed!")
-        else:
-            st.warning("⚠ No preprocessed image found for OD/OC.")
-    
-    elif task_type == 'Vessel':
-        st.subheader("Vessel Segmentation")
+        preprocessed_img = st.session_state['preprocessed_image']
         
-        if 'vessel_preprocessed' in st.session_state:
-            preprocessed_img = st.session_state['vessel_preprocessed']
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.image(preprocessed_img, caption="Preprocessed Image")
-            
-            if st.button("Run Vessel Segmentation"):
-                with st.spinner("Loading model and running segmentation..."):
-                    model = load_vessel_model()
+        col1, col2 = st.columns(2)
+        with col1:
+            st.image(preprocessed_img, caption="Preprocessed Image")
+        
+        if st.button("Run OD/OC Segmentation"):
+            with st.spinner("Loading model and running segmentation..."):
+                model = load_od_oc_model()
+                
+                if model is not None:
+                    prediction = predict_od_oc(model, preprocessed_img)
                     
-                    if model is not None:
-                        prediction = predict_vessel(model, preprocessed_img)
-                        
-                        # Convert prediction to displayable format
-                        vessel_mask = (prediction > 0.5).astype(np.uint8) * 255
-                        if len(vessel_mask.shape) == 3:
-                            vessel_mask = vessel_mask[0]
+                    # Convert prediction to displayable format
+                    if len(prediction.shape) == 3:
+                        od_mask = (prediction[0] > 0.5).astype(np.uint8) * 255
+                        oc_mask = (prediction[1] > 0.5).astype(np.uint8) * 255
                         
                         with col2:
-                            st.image(vessel_mask, caption="Vessel Segmentation")
+                            st.image(od_mask, caption="OD Segmentation")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            st.image(oc_mask, caption="OC Segmentation")
                         
                         # Save results
-                        st.session_state['vessel_mask'] = vessel_mask
+                        st.session_state['od_mask'] = od_mask
+                        st.session_state['oc_mask'] = oc_mask
+                        st.session_state['segmentation_completed'] = True
+                        st.session_state['segmentation_type'] = 'OD/OC'
                         
-                        st.success("✅ Vessel segmentation completed!")
-        else:
-            st.warning("⚠ No preprocessed image found for vessel.")
-
+                        st.success("✅ OD/OC segmentation completed!")
+                    else:
+                        mask = (prediction > 0.5).astype(np.uint8) * 255
+                        with col2:
+                            st.image(mask, caption="Segmentation Result")
+                        st.session_state['seg_mask'] = mask
+                        st.session_state['segmentation_completed'] = True
+                        st.session_state['segmentation_type'] = 'OD/OC'
+                        st.success("✅ Segmentation completed!")
+    
+    elif selected_task == "Vessel Segmentation":
+        st.subheader("Vessel Segmentation")
+        
+        preprocessed_img = st.session_state['vessel_preprocessed']
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.image(preprocessed_img, caption="Preprocessed Image")
+        
+        if st.button("Run Vessel Segmentation"):
+            with st.spinner("Loading model and running segmentation..."):
+                model = load_vessel_model()
+                
+                if model is not None:
+                    prediction = predict_vessel(model, preprocessed_img)
+                    
+                    # Convert prediction to displayable format
+                    vessel_mask = (prediction > 0.5).astype(np.uint8) * 255
+                    if len(vessel_mask.shape) == 3:
+                        vessel_mask = vessel_mask[0]
+                    
+                    with col2:
+                        st.image(vessel_mask, caption="Vessel Segmentation")
+                    
+                    # Save results
+                    st.session_state['vessel_mask'] = vessel_mask
+                    st.session_state['segmentation_completed'] = True
+                    st.session_state['segmentation_type'] = 'Vessel'
+                    
+                    st.success("✅ Vessel segmentation completed!")
 
 # ===================== OTHER PAGES ===================== #
 
