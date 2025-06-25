@@ -644,7 +644,6 @@ def Preprocessing():
                         with col1:
                             st.image(img_np, caption="❌ Before: Uncentered full image", use_container_width=True)
                         with col2:
-                            st.image(results['step7_final'], caption="✅ After: PRECISION centered ONH!", use_container_width=True) caption="3️⃣ Sharpened", use_container_width=True)
                             st.image(results['step7_final'], caption="7️⃣ FINAL RESULT", use_container_width=True)
                         
                         with col4:
