@@ -413,8 +413,8 @@ def Segmentation():
                     colored_result = np.zeros((seg_map.shape[0], seg_map.shape[1], 3), dtype=np.uint8)
                     
                     # Background stays black (0, 0, 0)
-                    colored_result[seg_map == 1] = [255, 0, 0]    # OD = Red
-                    colored_result[seg_map == 2] = [0, 255, 0]    # OC = Green
+                    colored_result[seg_map == 1] = [169, 169, 169]  # OD = Grey
+                    colored_result[seg_map == 2] = [255, 255, 255]  # OC = White
                     
                     with col2:
                         st.image(colored_result, caption="OD/OC Segmentation (Red: OD, Green: OC)")
@@ -423,11 +423,11 @@ def Segmentation():
                     st.subheader("Legend")
                     legend_col1, legend_col2, legend_col3 = st.columns(3)
                     with legend_col1:
-                        st.markdown("🔴 **Red: Optic Disc (OD)**")
+                        st.markdown("🩶 **Red: Optic Disc (OD)**")
                     with legend_col2:
-                        st.markdown("🟢 **Green: Optic Cup (OC)**")
+                        st.markdown("🤍 **White: Optic Cup (OC)**")
                     with legend_col3:
-                        st.markdown("⚫ **Black: Background**")
+                        st.markdown("🖤 **Black: Background**")
                     
                     # Save results
                     st.session_state['segmentation_map'] = seg_map
