@@ -6,18 +6,33 @@ import matplotlib.pyplot as plt
 
 # ===================== COVER PAGE ===================== #
 def Cover():
+    col1, col2, col3 = st.columns([1, 1, 6])
+
+    with col1:
+        if os.path.exists("assets/logoits.png"):
+            st.image("assets/logoits.png", width=80)
+        else:
+            st.write("")
+
+    with col2:
+        if os.path.exists("assets/logobme.png"):
+            st.image("assets/logobme.png", width=80)
+        else:
+            st.write("")
+
     st.title("TUGAS AKHIR")
     st.header("KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CNN")
     st.subheader("Nadhifatul Fuadah - 5023211053")
     st.write("**Dosen Pembimbing 1:** Prof. Dr. Tri Arief Sardjono, S.T., M.T")
     st.write("**Dosen Pembimbing 2:** Nada Fitrieyatul Hikmah, S.T., M.T")
 
-    st.sidebar.info(
-        "Navigasi:\n"
-        "- Preprocessing: Enhance image quality\n"
-        "- Segmentation: OD/OC atau Vessel\n" 
-        "- Feature Extraction: Analisis CDR, vessel tortuosity\n"
-        "- Classification: Prediksi tingkat keparahan glaukoma"
+     st.sidebar.info(
+        "Navigation Instructions:\n"
+        "- Go to **Preprocessing** to enhance image quality\n"
+        "- Go to **Segmentation** to choose between OD/OC or Vessel\n"
+        "- Go to **Feature Extraction** to analyze CDR, vessel tortuosity, etc.\n"
+        "- Use **Classification** to predict glaucoma severity\n"
+        "- Visit **About Glaucoma** to learn more"
     )
 
 # ===================== ABOUT PAGE ===================== #
