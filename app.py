@@ -69,7 +69,7 @@ def About():
 # ===================== PREPOS OD/OC FUNCTIONS ===================== #
 def crop_optic_disc_improved(image, crop_factor=1.5):
     """
-    Crop around the ONH with proper margins
+    Crop around the ONH with proper margins, adjusted for asymmetric bright regions
     """
     try:
         # Convert to LAB color space for better detection
@@ -97,8 +97,38 @@ def crop_optic_disc_improved(image, crop_factor=1.5):
         
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
-            (x, y), radius = cv2.minEnclosingCircle(largest_contour)
-            center_x, center_y = int(x), int(y)
+            
+            # Get bounding box of the bright region
+            x_cont, y_cont, w_cont, h_cont = cv2.boundingRect(largest_contour)
+            
+            # Calculate center of mass of the bright region instead of geometric center
+            M = cv2.moments(largest_contour)
+            if M["m00"] != 0:
+                center_x = int(M["m10"] / M["m00"])
+                center_y = int(M["m01"] / M["m00"])
+            else:
+                center_x = x_cont + w_cont // 2
+                center_y = y_cont + h_cont // 2
+            
+            # Adjust center based on the actual bright region distribution
+            # Find the weighted center considering intensity distribution
+            mask_region = bright_mask[y_cont:y_cont+h_cont, x_cont:x_cont+w_cont]
+            intensity_region = l_channel[y_cont:y_cont+h_cont, x_cont:x_cont+w_cont]
+            
+            # Calculate intensity-weighted center
+            y_indices, x_indices = np.ogrid[:h_cont, :w_cont]
+            total_intensity = np.sum(intensity_region * mask_region)
+            
+            if total_intensity > 0:
+                weighted_x = np.sum(x_indices * intensity_region * mask_region) / total_intensity
+                weighted_y = np.sum(y_indices * intensity_region * mask_region) / total_intensity
+                
+                # Adjust the center based on weighted calculation
+                center_x = int(x_cont + weighted_x)
+                center_y = int(y_cont + weighted_y)
+            
+            # Calculate radius based on the bright region
+            (_, _), radius = cv2.minEnclosingCircle(largest_contour)
             radius = int(radius)
             
             if radius < min(image.shape[:2]) // 15:
@@ -107,25 +137,65 @@ def crop_optic_disc_improved(image, crop_factor=1.5):
             center_x, center_y = max_loc
             radius = min(image.shape[:2]) // 12
         
-        # Calculate crop with margins
+        # Calculate crop with margins, but adjust for asymmetric distribution
         crop_radius = int(radius * crop_factor)
         
-        # Ensure bounds
-        x_start = max(0, center_x - crop_radius)
-        y_start = max(0, center_y - crop_radius)
-        x_end = min(image.shape[1], center_x + crop_radius)
-        y_end = min(image.shape[0], center_y + crop_radius)
+        # Fine-tune crop boundaries to reduce excessive space on one side
+        # Check intensity distribution around the center to adjust boundaries
+        search_radius = int(crop_radius * 1.2)
+        y_start_search = max(0, center_y - search_radius)
+        y_end_search = min(image.shape[0], center_y + search_radius)
+        x_start_search = max(0, center_x - search_radius)
+        x_end_search = min(image.shape[1], center_x + search_radius)
+        
+        # Get intensity profile in the search area
+        search_region = l_channel[y_start_search:y_end_search, x_start_search:x_end_search]
+        
+        # Find actual boundaries of significant brightness
+        row_intensities = np.mean(search_region, axis=1)
+        col_intensities = np.mean(search_region, axis=0)
+        
+        # Find where intensity drops significantly (to avoid too much dark space)
+        intensity_threshold = np.mean(search_region) * 0.7
+        
+        # Find tight boundaries
+        significant_rows = np.where(row_intensities > intensity_threshold)[0]
+        significant_cols = np.where(col_intensities > intensity_threshold)[0]
+        
+        if len(significant_rows) > 0 and len(significant_cols) > 0:
+            # Adjust crop boundaries based on actual bright content
+            tight_y_start = y_start_search + significant_rows[0]
+            tight_y_end = y_start_search + significant_rows[-1]
+            tight_x_start = x_start_search + significant_cols[0]
+            tight_x_end = x_start_search + significant_cols[-1]
+            
+            # Add moderate padding around the tight boundaries
+            padding = crop_radius // 3
+            
+            y_start = max(0, tight_y_start - padding)
+            y_end = min(image.shape[0], tight_y_end + padding)
+            x_start = max(0, tight_x_start - padding)
+            x_end = min(image.shape[1], tight_x_end + padding)
+        else:
+            # Fallback to original method
+            y_start = max(0, center_y - crop_radius)
+            y_end = min(image.shape[0], center_y + crop_radius)
+            x_start = max(0, center_x - crop_radius)
+            x_end = min(image.shape[1], center_x + crop_radius)
         
         # Crop the image
         cropped_image = image[y_start:y_end, x_start:x_end]
         
-        # Make it square
+        # Make it square by taking the smaller dimension and centering
         h, w = cropped_image.shape[:2]
         if h != w:
             size = min(h, w)
-            start_h = (h - size) // 2
-            start_w = (w - size) // 2
-            cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
+            if h > w:
+                start_h = (h - size) // 2
+                cropped_image = cropped_image[start_h:start_h+size, :]
+            else:
+                start_w = (w - size) // 2
+                cropped_image = cropped_image[:, start_w:start_w+size]
         
         return cropped_image, (center_x, center_y, radius)
         
