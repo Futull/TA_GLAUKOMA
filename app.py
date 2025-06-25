@@ -436,7 +436,8 @@ def Segmentation():
                     st.image(image, caption="Preprocessed for OD/OC Segmentation")
 
                     # Load and Run OD/OC Segmentation Model
-                    model_od_oc = torch.load('fix_model_odoc.pth')  
+                    model_od_oc = Build_UNet(num_classes=3)  # Define your model architecture
+                    model_od_oc.load_state_dict(torch.load('fix_model_odoc.pt'))  # Load the saved model weights
                     model_od_oc.eval()
 
                     image_tensor = transforms.ToTensor()(image).unsqueeze(0)
@@ -452,8 +453,9 @@ def Segmentation():
                     st.image(image, caption="Preprocessed for Vessel Segmentation")
 
                     # Load and Run Vessel Segmentation Model
-                    model_vessel = torch.load('fix_model_vessel.pth')  
-                    model_vessel.eval()  # Set to evaluation mode
+                    model_vessel = Build_UNet(num_classes=1) 
+                    model_vessel.load_state_dict(torch.load('fix_model_vessel.pth'))  
+                    model_vessel.eval() 
 
                     # Convert to 3 channels for model input (stacked green channel)
                     image_tensor = np.stack([image] * 3, axis=-1)  # Stack to make it 3 channels
