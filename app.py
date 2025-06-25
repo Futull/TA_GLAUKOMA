@@ -174,70 +174,139 @@ def detect_optic_disc_template_matching(image):
         
         return contour_points.reshape(-1, 1, 2).astype(np.int32)
 
-def crop_optic_disc_improved(image, crop_factor=2.0):
+def crop_optic_disc_improved(image, crop_factor=1.8):
     """
-    Crop ONLY the ONH region, removing everything outside
+    Crop TIGHTLY around the ONH - focus on the BRIGHT circular area only
     """
     try:
-        # Detect optic disc
-        optic_disc_contour = detect_optic_disc_improved(image)
+        # Convert to different color spaces for better detection
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+        l_channel = lab[:, :, 0]
         
-        # Get bounding rectangle
-        x, y, w, h = cv2.boundingRect(optic_disc_contour)
+        # Method 1: Find the brightest circular region (ONH is brightest)
+        blurred = cv2.GaussianBlur(l_channel, (15, 15), 0)
         
-        # Calculate center and radius
-        center_x = x + w // 2
-        center_y = y + h // 2
-        radius = max(w, h) // 2
+        # Find the absolute brightest point
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
         
-        # Expand the cropping region (smaller factor for tighter crop)
+        # Use a very high threshold to get only the brightest regions
+        threshold_value = max_val * 0.85  # Take only the top 15% brightest areas
+        _, bright_mask = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
+        
+        # Morphological operations to get a clean circular region
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, kernel)
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, kernel)
+        
+        # Find contours in the bright mask
+        contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if contours:
+            # Find the contour closest to the brightest point
+            best_contour = None
+            min_distance = float('inf')
+            
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                if area > 500:  # Minimum area threshold
+                    # Calculate centroid
+                    M = cv2.moments(contour)
+                    if M["m00"] != 0:
+                        cx = int(M["m10"] / M["m00"])
+                        cy = int(M["m01"] / M["m00"])
+                        
+                        # Distance to brightest point
+                        distance = np.sqrt((cx - max_loc[0])**2 + (cy - max_loc[1])**2)
+                        
+                        if distance < min_distance:
+                            min_distance = distance
+                            best_contour = contour
+            
+            if best_contour is not None:
+                # Get bounding circle instead of rectangle for better circular crop
+                (x, y), radius = cv2.minEnclosingCircle(best_contour)
+                center_x, center_y = int(x), int(y)
+                radius = int(radius)
+            else:
+                # Fallback: use brightest point
+                center_x, center_y = max_loc
+                radius = min(image.shape[:2]) // 12
+        else:
+            # Fallback: use brightest point
+            center_x, center_y = max_loc
+            radius = min(image.shape[:2]) // 12
+        
+        # Calculate tight crop around the detected ONH
         crop_radius = int(radius * crop_factor)
         
-        # Calculate crop coordinates with bounds checking
+        # Ensure we don't go outside image bounds
         x_start = max(0, center_x - crop_radius)
         y_start = max(0, center_y - crop_radius)
         x_end = min(image.shape[1], center_x + crop_radius)
         y_end = min(image.shape[0], center_y + crop_radius)
         
-        # Crop the image - ONLY THE ONH AREA
+        # ACTUAL TIGHT CROP - only the ONH region
         cropped_image = image[y_start:y_end, x_start:x_end]
         
-        # Ensure minimum size
-        if cropped_image.shape[0] < 100 or cropped_image.shape[1] < 100:
-            # Fallback to center crop with larger area
-            h, w = image.shape[:2]
-            size = min(h, w) // 3  # Smaller crop for better focus
-            center_x, center_y = w // 2, h // 2
-            x_start = max(0, center_x - size // 2)
-            y_start = max(0, center_y - size // 2)
-            x_end = min(w, center_x + size // 2)
-            y_end = min(h, center_y + size // 2)
+        # Ensure minimum size and make it square
+        if cropped_image.shape[0] < 200 or cropped_image.shape[1] < 200:
+            # Increase crop size if too small
+            crop_radius = max(200, crop_radius)
+            x_start = max(0, center_x - crop_radius)
+            y_start = max(0, center_y - crop_radius)
+            x_end = min(image.shape[1], center_x + crop_radius)
+            y_end = min(image.shape[0], center_y + crop_radius)
             cropped_image = image[y_start:y_end, x_start:x_end]
         
-        # Create visualization for debugging (original image with detection overlay)
+        # Make crop square by taking the minimum dimension
+        h, w = cropped_image.shape[:2]
+        if h != w:
+            size = min(h, w)
+            start_h = (h - size) // 2
+            start_w = (w - size) // 2
+            cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
+        
+        # Create visualization
         visualization = image.copy()
         cv2.circle(visualization, (center_x, center_y), radius, (0, 255, 0), 3)
         cv2.rectangle(visualization, (x_start, y_start), (x_end, y_end), (255, 0, 0), 3)
+        cv2.circle(visualization, (center_x, center_y), 5, (0, 0, 255), -1)  # Center point
         
         return cropped_image, (center_x, center_y, radius), visualization, (x_start, y_start, x_end, y_end)
         
     except Exception as e:
-        st.warning(f"Advanced detection failed: {e}. Using fallback method.")
-        # Fallback to center crop
-        h, w = image.shape[:2]
-        size = min(h, w) // 3
-        center_x, center_y = w // 2, h // 2
-        x_start = max(0, center_x - size // 2)
-        y_start = max(0, center_y - size // 2)
-        x_end = min(w, center_x + size // 2)
-        y_end = min(h, center_y + size // 2)
+        st.warning(f"Advanced detection failed: {e}. Using brightest point fallback.")
+        
+        # Ultimate fallback: Find brightest point and crop around it
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        blurred = cv2.GaussianBlur(gray, (15, 15), 0)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
+        
+        center_x, center_y = max_loc
+        radius = min(image.shape[:2]) // 10
+        crop_radius = int(radius * crop_factor)
+        
+        x_start = max(0, center_x - crop_radius)
+        y_start = max(0, center_y - crop_radius)
+        x_end = min(image.shape[1], center_x + crop_radius)
+        y_end = min(image.shape[0], center_y + crop_radius)
+        
         cropped_image = image[y_start:y_end, x_start:x_end]
         
-        # Create fallback visualization
+        # Make square
+        h, w = cropped_image.shape[:2]
+        if h != w:
+            size = min(h, w)
+            start_h = (h - size) // 2
+            start_w = (w - size) // 2
+            cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
+        
         visualization = image.copy()
         cv2.rectangle(visualization, (x_start, y_start), (x_end, y_end), (255, 0, 0), 3)
+        cv2.circle(visualization, (center_x, center_y), 5, (0, 0, 255), -1)
         
-        return cropped_image, (center_x, center_y, size // 2), visualization, (x_start, y_start, x_end, y_end)
+        return cropped_image, (center_x, center_y, radius), visualization, (x_start, y_start, x_end, y_end)
 
 def resize_image(image, target_size=(256, 256)):
     """
@@ -416,13 +485,15 @@ def Preprocessing():
             st.subheader("Improved OD/OC Preprocessing Pipeline")
             
             # Add parameter controls
-            st.sidebar.subheader("ONH Cropping Parameters")
-            crop_factor = st.sidebar.slider("Crop Tightness", 1.2, 3.0, 2.0, 0.1, 
-                                          help="Smaller = tighter crop, Larger = more surrounding area")
+            st.sidebar.subheader("🎯 ONH Tight Cropping")
+            crop_factor = st.sidebar.slider("Crop Tightness", 1.2, 2.5, 1.8, 0.1, 
+                                          help="1.2 = Super tight (only bright ONH), 2.5 = Include more surrounding area")
+            
+            st.sidebar.info("🎯 **New Algorithm**: Detects the BRIGHTEST circular area (ONH) and crops tightly around it!")
             
             # Add processing button
-            if st.button("✂️ Start ONH Cropping & Preprocessing"):
-                with st.spinner("Detecting and cropping ONH region... Please wait"):
+            if st.button("🔍 Detect & Crop ONH (Bright Area Only)"):
+                with st.spinner("🎯 Finding brightest ONH region and cropping tightly..."):
                     # Process the image step by step
                     results = preprocess_od_oc_stepwise(img_np)
                     
@@ -432,84 +503,98 @@ def Preprocessing():
                         st.session_state['preprocessed_image'] = results['step7_final']
                         
                         # Display detection and cropping results
-                        st.subheader("🎯 ONH Detection & Cropping Results")
+                        st.subheader("🎯 Bright ONH Detection & Tight Cropping")
                         
                         # Show before and after cropping
                         col1, col2 = st.columns(2)
                         
                         with col1:
                             st.image(results['detection_visualization'], 
-                                   caption="📍 Original with Detection Box", 
+                                   caption="🔍 Original: Red dot = brightest point, Green circle = detected ONH", 
                                    use_container_width=True)
                         
                         with col2:
                             st.image(results['step1_cropped'], 
-                                   caption="✂️ Cropped ONH Region ONLY", 
+                                   caption="✂️ TIGHT CROP: Only Bright ONH Area!", 
                                    use_container_width=True)
                         
                         # Show cropping details
                         center_x, center_y, radius = results['detection_info']
                         x_start, y_start, x_end, y_end = results['crop_coordinates']
                         
-                        st.success(f"✅ ONH Successfully Detected and Cropped!")
+                        st.success(f"🎯 Perfect! ONH Bright Area Detected & Cropped Successfully!")
                         
                         col1, col2 = st.columns(2)
                         with col1:
                             st.info(f"""
-                            **📊 Detection Details:**
-                            - ONH Center: ({center_x}, {center_y})
-                            - ONH Radius: {radius} pixels
+                            **🔍 Brightness Detection:**
+                            - Brightest point: ({center_x}, {center_y})
+                            - ONH radius: {radius} pixels
+                            - Detection method: LAB L-channel analysis
                             """)
                         
                         with col2:
+                            original_size = img_np.shape[1] * img_np.shape[0]
+                            crop_size = (x_end-x_start) * (y_end-y_start)
+                            reduction = ((original_size - crop_size) / original_size) * 100
+                            
                             st.info(f"""
-                            **✂️ Crop Details:**
-                            - Original size: {img_np.shape[1]}x{img_np.shape[0]} pixels
-                            - Cropped size: {x_end-x_start}x{y_end-y_start} pixels
-                            - Crop coordinates: ({x_start},{y_start}) to ({x_end},{y_end})
+                            **✂️ Tight Crop Results:**
+                            - Original: {img_np.shape[1]}×{img_np.shape[0]} ({original_size:,} pixels)
+                            - Cropped: {x_end-x_start}×{y_end-y_start} ({crop_size:,} pixels)
+                            - Size reduction: {reduction:.1f}%
                             """)
                         
-                        # Display all preprocessing steps
-                        st.subheader("📋 Complete Preprocessing Pipeline")
-                        
-                        # Create 3 columns for better layout
-                        col1, col2, col3 = st.columns(3)
+                        # Display DRAMATIC before/after comparison
+                        st.subheader("🔥 DRAMATIC TRANSFORMATION: Full Fundus → Pure ONH")
+                        col1, col2 = st.columns(2)
                         
                         with col1:
-                            st.image(results['step1_cropped'], caption="Step 1: ONH Cropped", use_container_width=True)
-                            st.image(results['step4_color_norm'], caption="Step 4: Color Normalized", use_container_width=True)
-                            st.image(results['step7_final'], caption="Step 7: Final Result", use_container_width=True)
+                            st.image(img_np, caption="📸 BEFORE: Full Fundus Image", use_container_width=True)
                         
                         with col2:
-                            st.image(results['step2_resized'], caption="Step 2: Resized (256x256)", use_container_width=True)
-                            st.image(results['step5_gamma'], caption="Step 5: Gamma Corrected", use_container_width=True)
+                            st.image(results['step1_cropped'], caption="🎯 AFTER: Pure ONH (Tight Crop)", use_container_width=True)
+                        
+                        # Display all preprocessing steps with the cropped ONH
+                        st.subheader("🔬 ONH Processing Pipeline (All Steps on Cropped ONH)")
+                        
+                        # Create 4 columns for better layout
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.image(results['step1_cropped'], caption="1️⃣ ONH Tight Crop", use_container_width=True)
+                            st.image(results['step5_gamma'], caption="5️⃣ Gamma Corrected", use_container_width=True)
+                        
+                        with col2:
+                            st.image(results['step2_resized'], caption="2️⃣ Resized 256×256", use_container_width=True)
+                            st.image(results['step6_clahe'], caption="6️⃣ CLAHE Enhanced", use_container_width=True)
                         
                         with col3:
-                            st.image(results['step3_sharpened'], caption="Step 3: Sharpened", use_container_width=True)
-                            st.image(results['step6_clahe'], caption="Step 6: CLAHE Applied", use_container_width=True)
+                            st.image(results['step3_sharpened'], caption="3️⃣ Sharpened", use_container_width=True)
+                            st.image(results['step7_final'], caption="7️⃣ FINAL RESULT", use_container_width=True)
                         
-                        st.success("✅ All preprocessing steps completed successfully!")
+                        with col4:
+                            st.image(results['step4_color_norm'], caption="4️⃣ Color Normalized", use_container_width=True)
                         
-                        # Show detailed processing summary
+                        st.success("🏆 Perfect! ONH extraction and processing completed!")
+                        
+                        # Show algorithm details
                         st.info("""
-                        **🔄 Complete Processing Summary:**
-                        1. **🎯 ONH Detection**: Advanced multi-method detection using brightness analysis
-                        2. **✂️ Precise Cropping**: Cropped ONLY the ONH region, removing all surrounding areas
-                        3. **📏 Resizing**: Resized cropped ONH to 256×256 pixels
-                        4. **🔍 Sharpening**: Enhanced details with combined filters
-                        5. **🎨 Color Normalization**: Standardized RGB channels
-                        6. **🔆 Gamma Correction**: Improved contrast (γ=1.1)
-                        7. **✨ CLAHE**: Adaptive histogram equalization
-                        8. **🧹 Noise Reduction**: Median filtering for cleanup
+                        **🧠 NEW Algorithm Details:**
+                        1. **🔍 Brightness Analysis**: Finds the absolute brightest point in LAB L-channel
+                        2. **🎯 Circular Detection**: Uses top 15% brightest areas to find ONH circle
+                        3. **✂️ Tight Cropping**: Crops exactly around the detected bright ONH region
+                        4. **📐 Square Optimization**: Ensures perfect square crop for processing
+                        5. **🔄 Smart Preprocessing**: All 7 steps applied ONLY to the ONH region
                         """)
                         
-                        # Show final comparison
-                        st.subheader("🔍 Final Comparison: Original vs Processed ONH")
+                        # Final dramatic comparison
+                        st.subheader("🏆 FINAL RESULT: Mission Accomplished!")
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.image(img_np, caption="🖼️ Original Full Fundus Image", use_container_width=True)
+                            st.image(img_np, caption="😞 Old Way: Whole fundus image", use_container_width=True)
                         with col2:
-                            st.image(results['step7_final'], caption="🎯 Processed ONH Region (Ready for Analysis)", use_container_width=True)
+                            st.image(results['step7_final'], caption="🎯 NEW WAY: Pure processed ONH only!", use_container_width=True)
                     
         elif task == "Vessel Segmentation":
             st.subheader("Vessel Preprocessing Pipeline")
