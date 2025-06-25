@@ -392,7 +392,7 @@ def preprocess_od_oc_stepwise(image):
     
     # Step 1: Crop ONH region - ACTUAL CROPPING, not just marking
     try:
-        cropped_image, detection_info, visualization, crop_coords = crop_optic_disc_improved(image, crop_factor=2.0)
+        cropped_image, detection_info, visualization, crop_coords = crop_optic_disc_improved(image, crop_factor=1.0)
         results['step1_cropped'] = cropped_image
         results['detection_info'] = detection_info
         results['detection_visualization'] = visualization
