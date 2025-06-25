@@ -65,218 +65,79 @@ def About():
     - Vascular narrowing
     """)
 
-# ===================== IMPROVED PREPROCESSING FUNCTIONS ===================== #
-
-def detect_optic_disc_improved(image):
-    """
-    Improved optic disc detection using multiple techniques
-    """
-    # Convert to different color spaces
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-    lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
-    
-    # Method 1: Using brightness detection in LAB space
-    l_channel = lab[:, :, 0]
-    
-    # Apply Gaussian blur to reduce noise
-    blurred = cv2.GaussianBlur(l_channel, (15, 15), 0)
-    
-    # Find the brightest region (optic disc is usually the brightest)
-    # Use top 5% of brightest pixels
-    threshold_value = np.percentile(blurred, 95)
-    _, bright_mask = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
-    
-    # Morphological operations to clean up the mask
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
-    bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, kernel)
-    bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, kernel)
-    
-    # Find contours
-    contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    if len(contours) == 0:
-        # Fallback method: use template matching approach
-        return detect_optic_disc_template_matching(image)
-    
-    # Filter contours by area and circularity
-    valid_contours = []
-    image_area = image.shape[0] * image.shape[1]
-    
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        # Optic disc should be 1-5% of total image area
-        if 0.005 * image_area < area < 0.05 * image_area:
-            # Check circularity
-            perimeter = cv2.arcLength(contour, True)
-            if perimeter > 0:
-                circularity = 4 * np.pi * area / (perimeter * perimeter)
-                if circularity > 0.3:  # Reasonable circularity threshold
-                    valid_contours.append((contour, area, circularity))
-    
-    if not valid_contours:
-        # Fallback: take largest contour
-        if contours:
-            largest_contour = max(contours, key=cv2.contourArea)
-            return largest_contour
-        else:
-            raise ValueError("No optic disc detected in the image.")
-    
-    # Select best contour (balance between size and circularity)
-    best_contour = max(valid_contours, key=lambda x: x[1] * x[2])  # area * circularity
-    
-    return best_contour[0]
-
-def detect_optic_disc_template_matching(image):
-    """
-    Fallback method using template matching approach
-    """
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    
-    # Apply Gaussian blur
-    blurred = cv2.GaussianBlur(gray, (9, 9), 0)
-    
-    # Use HoughCircles to detect circular objects
-    circles = cv2.HoughCircles(
-        blurred,
-        cv2.HOUGH_GRADIENT,
-        dp=1,
-        minDist=int(min(image.shape[:2]) * 0.3),  # Minimum distance between circles
-        param1=50,
-        param2=30,
-        minRadius=int(min(image.shape[:2]) * 0.05),  # Minimum radius
-        maxRadius=int(min(image.shape[:2]) * 0.15)   # Maximum radius
-    )
-    
-    if circles is not None:
-        circles = np.round(circles[0, :]).astype("int")
-        # Take the first detected circle
-        x, y, r = circles[0]
-        
-        # Create a contour from the circle
-        center = (x, y)
-        radius = r
-        # Generate circle contour points
-        angles = np.linspace(0, 2*np.pi, 100)
-        contour_points = np.array([[int(x + radius * np.cos(angle)), 
-                                   int(y + radius * np.sin(angle))] for angle in angles])
-        
-        return contour_points.reshape(-1, 1, 2).astype(np.int32)
-    else:
-        # Final fallback: assume center region
-        h, w = image.shape[:2]
-        center_x, center_y = w // 2, h // 2
-        radius = min(w, h) // 8
-        
-        angles = np.linspace(0, 2*np.pi, 100)
-        contour_points = np.array([[int(center_x + radius * np.cos(angle)), 
-                                   int(center_y + radius * np.sin(angle))] for angle in angles])
-        
-        return contour_points.reshape(-1, 1, 2).astype(np.int32)
+# ===================== PREPROCESSING FUNCTIONS ===================== #
 
 def crop_optic_disc_improved(image, crop_factor=2.5):
     """
-    Crop around the ONH with proper margins - BACK TO WORKING ALGORITHM but with better margins
+    Crop around the ONH with proper margins
     """
     try:
-        # Convert to different color spaces for better detection
+        # Convert to LAB color space for better detection
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
         l_channel = lab[:, :, 0]
         
-        # Method 1: Find the brightest circular region (ONH is brightest)
+        # Find the brightest circular region (ONH is brightest)
         blurred = cv2.GaussianBlur(l_channel, (15, 15), 0)
         
         # Find the absolute brightest point
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
         
-        # Use a moderate threshold to get bright regions (not too restrictive)
-        threshold_value = max_val * 0.80  # Take top 20% brightest areas
+        # Use threshold to get bright regions
+        threshold_value = max_val * 0.80
         _, bright_mask = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
         
-        # Morphological operations to get a clean circular region
+        # Morphological operations
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
         bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, kernel)
         bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, kernel)
         
-        # Find contours in the bright mask
+        # Find contours
         contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         if contours:
-            # Find the largest contour (should be the main ONH area)
             largest_contour = max(contours, key=cv2.contourArea)
-            
-            # Get bounding circle for better circular crop
             (x, y), radius = cv2.minEnclosingCircle(largest_contour)
             center_x, center_y = int(x), int(y)
             radius = int(radius)
             
-            # Ensure minimum radius
             if radius < min(image.shape[:2]) // 15:
                 radius = min(image.shape[:2]) // 12
-                
         else:
-            # Fallback: use brightest point
             center_x, center_y = max_loc
             radius = min(image.shape[:2]) // 12
         
-        # Calculate crop around the detected ONH with LARGER margins
-        crop_radius = int(radius * crop_factor)  # Now with configurable factor
+        # Calculate crop with margins
+        crop_radius = int(radius * crop_factor)
         
-        # Ensure we don't go outside image bounds
+        # Ensure bounds
         x_start = max(0, center_x - crop_radius)
         y_start = max(0, center_y - crop_radius)
         x_end = min(image.shape[1], center_x + crop_radius)
         y_end = min(image.shape[0], center_y + crop_radius)
         
-        # ACTUAL CROP - only the ONH region with proper margins
+        # Crop the image
         cropped_image = image[y_start:y_end, x_start:x_end]
         
-        # Ensure minimum size and make it square
-        if cropped_image.shape[0] < 300 or cropped_image.shape[1] < 300:
-            # Increase crop size if too small
-            crop_radius = max(300, crop_radius)
-            x_start = max(0, center_x - crop_radius)
-            y_start = max(0, center_y - crop_radius)
-            x_end = min(image.shape[1], center_x + crop_radius)
-            y_end = min(image.shape[0], center_y + crop_radius)
-            cropped_image = image[y_start:y_end, x_start:x_end]
-        
-        # Make crop square by taking the minimum dimension
+        # Make it square
         h, w = cropped_image.shape[:2]
         if h != w:
             size = min(h, w)
             start_h = (h - size) // 2
             start_w = (w - size) // 2
             cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
-            
-            # Update coordinates for accurate visualization
-            actual_x_start = x_start + start_w
-            actual_y_start = y_start + start_h
-            actual_x_end = actual_x_start + size
-            actual_y_end = actual_y_start + size
-        else:
-            actual_x_start, actual_y_start = x_start, y_start
-            actual_x_end, actual_y_end = x_end, y_end
         
-        # Create visualization
-        visualization = image.copy()
-        cv2.circle(visualization, (center_x, center_y), radius, (0, 255, 0), 4)
-        cv2.rectangle(visualization, (actual_x_start, actual_y_start), (actual_x_end, actual_y_end), (255, 0, 0), 4)
-        cv2.circle(visualization, (center_x, center_y), 8, (0, 0, 255), -1)  # Center point
-        
-        return cropped_image, (center_x, center_y, radius), visualization, (actual_x_start, actual_y_start, actual_x_end, actual_y_end)
+        return cropped_image, (center_x, center_y, radius)
         
     except Exception as e:
-        st.warning(f"ONH detection failed: {e}. Using improved fallback method.")
+        st.warning(f"ONH detection failed: {e}. Using fallback method.")
         
-        # Improved fallback: Find brightest point and crop with generous margins
+        # Fallback method
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         blurred = cv2.GaussianBlur(gray, (21, 21), 0)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
         
         center_x, center_y = max_loc
-        # Better radius estimation
         radius = min(image.shape[:2]) // 10
         crop_radius = int(radius * crop_factor)
         
@@ -295,48 +156,34 @@ def crop_optic_disc_improved(image, crop_factor=2.5):
             start_w = (w - size) // 2
             cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
         
-        visualization = image.copy()
-        cv2.rectangle(visualization, (x_start, y_start), (x_end, y_end), (255, 0, 0), 4)
-        cv2.circle(visualization, (center_x, center_y), 8, (0, 0, 255), -1)
-        
-        return cropped_image, (center_x, center_y, radius), visualization, (x_start, y_start, x_end, y_end)
+        return cropped_image, (center_x, center_y, radius)
 
 def resize_image(image, target_size=(256, 256)):
-    """
-    Resize image to target size
-    """
+    """Resize image to target size"""
     return cv2.resize(image, target_size, interpolation=cv2.INTER_LINEAR)
 
 def unsharp_mask(image, blur_ksize=5, strength=1.0):
-    """
-    Apply unsharp masking for sharpening
-    """
+    """Apply unsharp masking for sharpening"""
     blur = cv2.GaussianBlur(image, (blur_ksize, blur_ksize), 0)
     mask = cv2.addWeighted(image, 1 + strength, blur, -strength, 0)
     return np.clip(mask, 0, 255).astype(np.uint8)
 
 def high_pass_filter(image):
-    """
-    Apply high-pass filter for additional sharpening
-    """
+    """Apply high-pass filter for additional sharpening"""
     low_pass = cv2.GaussianBlur(image, (9, 9), 0)
     high_pass = cv2.subtract(image, low_pass)
     sharpened = cv2.add(image, high_pass)
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 def combined_sharpening(image):
-    """
-    Combine unsharp masking and high-pass filtering
-    """
+    """Combine unsharp masking and high-pass filtering"""
     unsharp = unsharp_mask(image, blur_ksize=5, strength=1.5)
     highpass = high_pass_filter(unsharp)
     return highpass
 
 def color_normalization_fixed(image, avg_r=0.9601, avg_g=0.6374, avg_b=0.3408):
-    """
-    Apply per-channel color normalization
-    """
-    img = image.astype(np.float32) / 255.0  # normalize to [0,1]
+    """Apply per-channel color normalization"""
+    img = image.astype(np.float32) / 255.0
     
     mean_r = np.mean(img[:, :, 0])
     mean_g = np.mean(img[:, :, 1])
@@ -350,54 +197,40 @@ def color_normalization_fixed(image, avg_r=0.9601, avg_g=0.6374, avg_b=0.3408):
     return (img * 255).astype(np.uint8)
 
 def apply_gamma_correction(image, gamma=1.1):
-    """
-    Apply gamma correction
-    """
-    if len(image.shape) == 3:  # Color image
-        normalized = image / 255.0
-        corrected = np.power(normalized, 1.0 / gamma)
-        return np.clip(corrected * 255.0, 0, 255).astype(np.uint8)
-    else:  # Grayscale image
-        normalized = image / 255.0
-        corrected = np.power(normalized, 1.0 / gamma)
-        return np.clip(corrected * 255.0, 0, 255).astype(np.uint8)
+    """Apply gamma correction"""
+    normalized = image / 255.0
+    corrected = np.power(normalized, 1.0 / gamma)
+    return np.clip(corrected * 255.0, 0, 255).astype(np.uint8)
 
 def apply_clahe(image, clip_limit=2.0, tile_grid_size=(12, 12)):
-    """
-    Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-    """
-    if len(image.shape) == 3:  # Color image
+    """Apply CLAHE"""
+    if len(image.shape) == 3:
         lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
         l, a, b = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
         cl = clahe.apply(l)
         merged = cv2.merge((cl, a, b))
         return cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
-    else:  # Grayscale image
+    else:
         clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
         return clahe.apply(image)
 
 def apply_median_filter(image, ksize=3):
-    """
-    Apply median filter for noise reduction
-    """
+    """Apply median filter for noise reduction"""
     return cv2.medianBlur(image, ksize)
 
 def preprocess_od_oc_stepwise(image):
     """
-    Apply step-by-step preprocessing for OD/OC segmentation with PROPER cropping
+    Apply step-by-step preprocessing for OD/OC segmentation
     Returns a dictionary with all intermediate results
     """
     results = {}
     
-    # Step 1: Crop ONH region - ACTUAL CROPPING, not just marking
+    # Step 1: Crop ONH region
     try:
-        cropped_image, detection_info, visualization, crop_coords = crop_optic_disc_improved(image, crop_factor=2.0)
+        cropped_image, detection_info = crop_optic_disc_improved(image, crop_factor=1.8)
         results['step1_cropped'] = cropped_image
         results['detection_info'] = detection_info
-        results['detection_visualization'] = visualization
-        results['crop_coordinates'] = crop_coords
-        
     except Exception as e:
         st.error(f"Error in Step 1 (ONH Cropping): {e}")
         return None
@@ -416,447 +249,137 @@ def preprocess_od_oc_stepwise(image):
     
     # Step 5: Gamma Correction
     gamma_corrected_image = apply_gamma_correction(color_normalized_image, gamma=1.1)
-    results['step5_gamma'] = gamma_corrected_image
+    results['step5_GAMMA'] = gamma_corrected_image
     
     # Step 6: CLAHE
     clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(12, 12))
-    results['step6_clahe'] = clahe_image
+    results['step6_CLAHE'] = clahe_image
     
     # Step 7: Median Filter
     final_image = apply_median_filter(clahe_image, ksize=3)
-    results['step7_final'] = final_image
+    results['step7_Median Filter'] = final_image
     
     return results
 
 def preprocess_vessel(image):
-    """
-    Preprocessing for vessel segmentation
-    """
-    # Resize image (256x256)
+    """Preprocessing for vessel segmentation"""
     resized_image = resize_image(image, target_size=(256, 256))
     
-    # Extract Green Channel
     if len(resized_image.shape) == 3:
-        green_channel = resized_image[:, :, 1]  # Extract green channel
+        green_channel = resized_image[:, :, 1]
     else:
         green_channel = resized_image
     
-    # Convert to 3-channel for processing
     green_3ch = cv2.cvtColor(green_channel, cv2.COLOR_GRAY2RGB)
-    
-    # Gamma Correction on Green Channel
     gamma_corrected_image = apply_gamma_correction(green_3ch, gamma=1.1)
-    
-    # CLAHE on Green Channel
     clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(12, 12))
-    
-    # Median Filter
     final_image = apply_median_filter(clahe_image, ksize=3)
     
     return final_image
 
-# ===================== IMPROVED PREPROCESSING PAGE ===================== #
+# ===================== PREPROCESSING PAGE ===================== #
 
 def Preprocessing():
     st.title("Preprocessing Steps")
     
-    # File uploader
     uploaded_file = st.file_uploader("Upload Fundus Image", type=["png", "jpg", "jpeg"])
     
     if uploaded_file:
-        # Load and display original image
         image = Image.open(uploaded_file).convert('RGB')
         img_np = np.array(image)
         
         st.subheader("Original Image")
-        st.image(img_np, caption="🟠 Original Fundus Image", use_container_width=True)
+        st.image(img_np, caption="Original Fundus Image", use_container_width=True)
         
-        # Task selection
         task = st.radio("Select Preprocessing Task", ["OD/OC Segmentation", "Vessel Segmentation"])
         
         if task == "OD/OC Segmentation":
-            st.subheader("Improved OD/OC Preprocessing Pipeline")
-            
-            # Add parameter controls
-            st.sidebar.subheader("🎯 ONH Cropping Precision Control")
-            crop_factor = st.sidebar.slider("ONH Crop Size", 1.5, 4.0, 2.5, 0.1, 
-                                          help="1.5 = SUPER TIGHT (very close to ONH), 4.0 = Include surrounding vessels")
-            
-            # Additional tight cropping option
-            tight_mode = st.sidebar.checkbox("🔥 ULTRA TIGHT Mode", 
-                                           help="Enable for maximum tight cropping around ONH only")
-            
-            if tight_mode:
-                st.sidebar.warning("⚠️ Ultra Tight Mode: May crop very close to ONH edges!")
-                crop_factor = st.sidebar.slider("Ultra Tight Factor", 1.2, 2.0, 1.6, 0.05, 
-                                               help="1.2 = EXTREMELY tight, 2.0 = Still tight but safer")
-            
-            st.sidebar.info("🎯 **Adjustable Tightness**: Lower values = more tight/mepet to ONH!")
-            
-            # Add processing button
-            if st.button("✂️ Crop ONH with Custom Tightness"):
-                with st.spinner("🎯 Detecting ONH and applying custom tight cropping..."):
-                    # Process the image step by step
+            if st.button("Apply OD/OC Preprocessing"):
+                with st.spinner("Processing..."):
                     results = preprocess_od_oc_stepwise(img_np)
                     
                     if results:
-                        # Store results in session state
                         st.session_state['preprocessing_results'] = results
                         st.session_state['preprocessed_image'] = results['step7_final']
                         
-                        # Display detection and cropping results
-                        if tight_mode:
-                            st.subheader("🔥 ULTRA TIGHT ONH Cropping Results")
-                        else:
-                            st.subheader("🎯 Custom ONH Cropping Results")
+                        # Display all steps in order
+                        st.subheader("Preprocessing Pipeline Results")
                         
-                        # Show before and after cropping
-                        col1, col2 = st.columns(2)
+                        # Show 8 steps in 4 columns x 2 rows
+                        col1, col2, col3, col4 = st.columns(4)
                         
                         with col1:
-                            st.image(results['detection_visualization'], 
-                                   caption="🔍 Detection: Green circle = ONH area, Red box = Crop region", 
-                                   use_container_width=True)
+                            st.image(img_np, caption="Original")
+                            st.text("Input fundus image")
                         
                         with col2:
-                            if tight_mode:
-                                caption = f"🔥 ULTRA TIGHT! Factor: {crop_factor}x"
-                            else:
-                                caption = f"✂️ Custom Crop! Factor: {crop_factor}x"
-                            st.image(results['step1_cropped'], 
-                                   caption=caption, 
-                                   use_container_width=True)
+                            st.image(results['step1_cropped'], caption="ONH Crop")
+                            st.text("Brightest region detection")
                         
-                        # Show cropping details
+                        with col3:
+                            st.image(results['step2_resized'], caption="Resized")
+                            st.text("256x256 pixels")
+                        
+                        with col4:
+                            st.image(results['step3_sharpened'], caption="Sharpening")
+                            st.text("Unsharp mask + High-pass")
+                        
+                        # Second row
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.image(results['step4_color_norm'], caption="Color Norm")
+                            st.text("Per-channel normalization")
+                        
+                        with col2:
+                            st.image(results['step5_gamma'], caption="Gamma")
+                            st.text("Gamma correction (γ=1.1)")
+                        
+                        with col3:
+                            st.image(results['step6_clahe'], caption="CLAHE")
+                            st.text("Adaptive histogram eq.")
+                        
+                        with col4:
+                            st.image(results['step7_final'], caption="Final")
+                            st.text("Median filter + Complete")
+                        
+                        st.success("✅ OD/OC preprocessing completed!")
+                        
+                        # Show detection info
                         center_x, center_y, radius = results['detection_info']
-                        x_start, y_start, x_end, y_end = results['crop_coordinates']
+                        st.info(f"ONH detected at center ({center_x}, {center_y}) with radius {radius} pixels")
                         
-                        if tight_mode and crop_factor < 1.8:
-                            st.success(f"🔥 ULTRA TIGHT! ONH Cropped Super Close with {crop_factor}x factor!")
-                        else:
-                            st.success(f"🎯 Perfect! ONH Cropped with {crop_factor}x factor!")
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.info(f"""
-                            **🔍 ONH Detection Results:**
-                            - ONH Center: ({center_x}, {center_y})
-                            - ONH Base Radius: {radius} pixels
-                            - Applied Factor: {crop_factor}x
-                            - Final Crop Radius: {int(radius * crop_factor)} pixels
-                            """)
-                        
-                        with col2:
-                            original_size = img_np.shape[1] * img_np.shape[0]
-                            crop_size = (x_end-x_start) * (y_end-y_start)
-                            reduction = ((original_size - crop_size) / original_size) * 100
-                            
-                            tightness_level = ""
-                            if crop_factor < 1.8:
-                                tightness_level = "🔥 ULTRA TIGHT"
-                            elif crop_factor < 2.2:
-                                tightness_level = "⚡ VERY TIGHT"
-                            elif crop_factor < 2.8:
-                                tightness_level = "✂️ TIGHT"
-                            else:
-                                tightness_level = "📏 NORMAL"
-                            
-                            st.info(f"""
-                            **✂️ Crop Tightness Analysis:**
-                            - Tightness Level: {tightness_level}
-                            - Original: {img_np.shape[1]}×{img_np.shape[0]} pixels
-                            - Cropped: {x_end-x_start}×{y_end-y_start} pixels
-                            - Reduction: {reduction:.1f}%
-                            """)
-                        
-                        # Show tightness comparison
-                        if crop_factor < 2.0:
-                            st.warning("🔥 **ULTRA TIGHT MODE**: Cropping very close to ONH boundaries!")
-                        elif crop_factor < 2.5:
-                            st.info("⚡ **TIGHT MODE**: Good balance between focus and safety margins")
-                        else:
-                            st.info("📏 **NORMAL MODE**: Safe margins with surrounding context")
-                        
-                        # Display PERFECT before/after comparison
-                        st.subheader(f"🎯 TRANSFORMATION: Factor {crop_factor}x")
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.image(img_np, caption="📸 BEFORE: Full Fundus Image", use_container_width=True)
-                        
-                        with col2:
-                            if tight_mode:
-                                st.image(results['step1_cropped'], caption=f"🔥 AFTER: ULTRA TIGHT ONH ({crop_factor}x)!", use_container_width=True)
-                            else:
-                                st.image(results['step1_cropped'], caption=f"🎯 AFTER: Custom Tight ONH ({crop_factor}x)!", use_container_width=True)
-                        
-                        # Display all preprocessing steps
-                        st.subheader("🔬 ONH Processing Pipeline")
-                        
-                        # Create 4 columns for better layout
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            st.image(results['step1_cropped'], caption="1️⃣ ONH Cropped", use_container_width=True)
-                            st.image(results['step5_gamma'], caption="5️⃣ Gamma Enhanced", use_container_width=True)
-                        
-                        with col2:
-                            st.image(results['step2_resized'], caption="2️⃣ Resized 256×256", use_container_width=True)
-                            st.image(results['step6_clahe'], caption="6️⃣ CLAHE Enhanced", use_container_width=True)
-                        
-                        with col3:
-                            st.image(results['step3_sharpened'], caption="3️⃣ Sharpened", use_container_width=True)
-                            st.image(results['step7_final'], caption="7️⃣ FINAL PRECISION!", use_container_width=True)
-                        
-                        with col4:
-                            st.image(results['step4_color_norm'], caption="4️⃣ Color Normalized", use_container_width=True)
-                        
-                        st.success("🏆 PRECISION! Perfect ONH cropping and processing!")
-                        
-                        # Show PRECISION algorithm details
-                        st.info("""
-                        **🧠 PRECISION Algorithm Details:**
-                        1. **🎯 Center-Based Cropping**: Calculates crop from ONH center, not edges
-                        2. **📐 Perfect Square Enforcement**: Forces exact square dimensions
-                        3. **⚖️ Balanced Boundary Handling**: Adjusts all sides equally when hitting image bounds
-                        4. **🎯 Precision Centering**: ONH center is exactly in the middle of crop
-                        5. **📏 Crosshair Visualization**: Yellow crosshairs show exact center alignment
-                        6. **🔄 Quality Assurance**: Validates square dimensions and center accuracy
-                        """)
-                        
-                        # Show precision tips
-                        st.subheader("💡 PRECISION Tips")
-                        st.markdown("""
-                        **For Maximum Precision:**
-                        - 🎯 **1.5-1.8x**: Ultra precise, minimal margins
-                        - ⚡ **1.8-2.2x**: Balanced precision with safety margins  
-                        - 📏 **2.2-3.0x**: Precision with more context
-                        
-                        **Quality Indicators:**
-                        - ✅ **Perfect Square**: Width = Height exactly
-                        - ✅ **Center Accuracy**: ONH center ± 2 pixels from crop center
-                        - ✅ **Yellow Crosshairs**: Show exact center alignment in visualization
-                        """)
-                        
-                        # Final precision comparison
-                        st.subheader("🏆 PRECISION ACHIEVED!")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.image(img_np, caption="❌ Before: Uncentered full image", use_container_width=True)
-                        with col2:
-                            st.image(results['step7_final'], caption="7️⃣ FINAL RESULT", use_container_width=True)
-                        
-                        with col4:
-                            st.image(results['step4_color_norm'], caption="4️⃣ Color Normalized", use_container_width=True)
-                        
-                        st.success("🏆 ONH cropping and processing completed!")
-                        
-                        # Show tightness guide
-                        st.subheader("📏 Tightness Level Guide")
-                        st.markdown("""
-                        | Factor | Level | Description | Use Case |
-                        |--------|-------|-------------|----------|
-                        | 1.2-1.5x | 🔥 **ULTRA TIGHT** | Extremely close to ONH, minimal margins | Research, precise analysis |
-                        | 1.6-1.9x | ⚡ **VERY TIGHT** | Close to ONH with minimal safety margin | Clinical analysis |
-                        | 2.0-2.4x | ✂️ **TIGHT** | Good focus with reasonable margins | General analysis |
-                        | 2.5-3.0x | 📏 **NORMAL** | Safe margins with context | Standard processing |
-                        | 3.1-4.0x | 🔍 **WIDE** | Include vessels and surrounding area | Comprehensive analysis |
-                        """)
-                        
-                        # Final comparison with recommendations
-                        st.subheader("💡 Recommendation")
-                        if crop_factor < 1.6:
-                            st.warning("""
-                            🔥 **ULTRA TIGHT**: Perfect for precise ONH analysis but be careful not to lose important edge details!
-                            - ✅ Maximum focus on ONH
-                            - ⚠️ Risk of cutting important boundaries
-                            - 🎯 Best for: Research, detailed morphology analysis
-                            """)
-                        elif crop_factor < 2.2:
-                            st.info("""
-                            ⚡ **VERY TIGHT**: Excellent balance for most clinical applications!
-                            - ✅ Great focus with safety margins
-                            - ✅ Preserves important ONH boundaries  
-                            - 🎯 Best for: Clinical diagnosis, standard analysis
-                            """)
-                        else:
-                            st.info("""
-                            📏 **NORMAL/WIDE**: Safe choice with good context!
-                            - ✅ Safe margins with surrounding context
-                            - ✅ Includes nearby vessels and structures
-                            - 🎯 Best for: Comprehensive analysis, education
-                            """) Cropped with Perfect Margins!")
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.info(f"""
-                            **🔍 ONH Detection Results:**
-                            - ONH Center: ({center_x}, {center_y})
-                            - ONH Radius: {radius} pixels
-                            - Detection: Brightest area analysis
-                            - Threshold: Top 20% bright regions
-                            """)
-                        
-                        with col2:
-                            original_size = img_np.shape[1] * img_np.shape[0]
-                            crop_size = (x_end-x_start) * (y_end-y_start)
-                            reduction = ((original_size - crop_size) / original_size) * 100
-                            
-                            st.info(f"""
-                            **✂️ Perfect Crop Results:**
-                            - Original: {img_np.shape[1]}×{img_np.shape[0]} pixels
-                            - Cropped: {x_end-x_start}×{y_end-y_start} pixels
-                            - Crop factor: {crop_factor}x radius
-                            - Reduction: {reduction:.1f}%
-                            """)
-                        
-                        # Display PERFECT before/after comparison
-                        st.subheader("🎯 PERFECT TRANSFORMATION: Full Fundus → ONH with Margins")
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.image(img_np, caption="📸 BEFORE: Full Fundus Image", use_container_width=True)
-                        
-                        with col2:
-                            st.image(results['step1_cropped'], caption="🎯 AFTER: ONH with Perfect Margins!", use_container_width=True)
-                        
-                        # Display all preprocessing steps
-                        st.subheader("🔬 ONH Processing Pipeline")
-                        
-                        # Create 4 columns for better layout
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            st.image(results['step1_cropped'], caption="1️⃣ ONH Cropped", use_container_width=True)
-                            st.image(results['step5_gamma'], caption="5️⃣ Gamma Enhanced", use_container_width=True)
-                        
-                        with col2:
-                            st.image(results['step2_resized'], caption="2️⃣ Resized 256×256", use_container_width=True)
-                            st.image(results['step6_clahe'], caption="6️⃣ CLAHE Enhanced", use_container_width=True)
-                        
-                        with col3:
-                            st.image(results['step3_sharpened'], caption="3️⃣ Sharpened", use_container_width=True)
-                            st.image(results['step7_final'], caption="7️⃣ FINAL PERFECT!", use_container_width=True)
-                        
-                        with col4:
-                            st.image(results['step4_color_norm'], caption="4️⃣ Color Normalized", use_container_width=True)
-                        
-                        st.success("🏆 PERFECT! ONH cropping and processing completed!")
-                        
-                        # Show algorithm details
-                        st.info("""
-                        **🧠 WORKING Algorithm (Fixed!):**
-                        1. **🔍 Brightness Detection**: Find brightest circular regions (not single point)
-                        2. **⭕ Circular Analysis**: Use minEnclosingCircle for proper ONH bounds
-                        3. **✂️ Smart Cropping**: Crop with configurable margins (2.0x - 4.0x radius)
-                        4. **📐 Square Optimization**: Perfect square crop for consistent processing
-                        5. **🔄 Complete Pipeline**: All 7 preprocessing steps on cropped ONH
-                        """)
-                        
-                        # Final comparison
-                        st.subheader("🏆 MISSION ACCOMPLISHED: Perfect ONH with Margins!")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.image(img_np, caption="❌ Too much background (original)", use_container_width=True)
-                        with col2:
-                            st.image(results['step7_final'], caption="✅ Perfect ONH focus with proper margins!", use_container_width=True)
-                    
         elif task == "Vessel Segmentation":
-            st.subheader("Vessel Preprocessing Pipeline")
-            
-            if st.button("🔄 Start Vessel Preprocessing"):
+            if st.button("Apply Vessel Preprocessing"):
                 with st.spinner("Processing vessel segmentation preprocessing..."):
                     processed_vessel = preprocess_vessel(img_np)
                     
-                    # Store in session state
                     st.session_state['vessel_preprocessed'] = processed_vessel
                     
-                    # Display results
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.image(img_np, caption="Original Image", use_container_width=True)
+                        st.image(img_np, caption="Original")
                     with col2:
-                        st.image(processed_vessel, caption="Vessel Preprocessed", use_container_width=True)
+                        st.image(processed_vessel, caption="Vessel Preprocessed")
                     
                     st.success("✅ Vessel preprocessing completed!")
                     
                     st.info("""
-                    **Vessel Processing Summary:**
-                    1. **Resizing**: Resized to 256×256 pixels
-                    2. **Green Channel**: Extracted green channel for better vessel contrast
-                    3. **Gamma Correction**: Applied gamma correction (γ=1.1)
-                    4. **CLAHE**: Applied contrast enhancement
-                    5. **Median Filter**: Applied noise reduction
+                    **Processing Steps:**
+                    1. Resize to 256×256
+                    2. Green channel extraction  
+                    3. Gamma correction (γ=1.1)
+                    4. CLAHE enhancement
+                    5. Median filter
                     """)
         
-        # Show individual step controls (optional)
-        if st.checkbox("Show Individual Step Controls"):
-            st.subheader("Individual Step Processing")
-            step_option = st.selectbox("Select Step", [
-                "Step 1: Advanced ONH Detection & Cropping",
-                "Step 2: Resize to 256x256",
-                "Step 3: Sharpening",
-                "Step 4: Color Normalization",
-                "Step 5: Gamma Correction",
-                "Step 6: CLAHE",
-                "Step 7: Median Filter"
-            ])
-            
-            if st.button(f"Apply {step_option}"):
-                with st.spinner(f"Processing: {step_option}"):
-                    if "Step 1" in step_option:
-                        try:
-                            cropped_image, detection_info, visualization, crop_coords = crop_optic_disc_improved(img_np)
-                            
-                            st.subheader("Individual Step 1: ONH Detection & Cropping")
-                            col1, col2, col3 = st.columns(3)
-                            
-                            with col1:
-                                st.image(img_np, caption="🖼️ Original Image", use_container_width=True)
-                            
-                            with col2:
-                                st.image(visualization, caption="🎯 Detection Overlay", use_container_width=True)
-                            
-                            with col3:
-                                st.image(cropped_image, caption="✂️ Cropped ONH ONLY", use_container_width=True)
-                            
-                            center_x, center_y, radius = detection_info
-                            x_start, y_start, x_end, y_end = crop_coords
-                            
-                            st.success(f"✅ ONH detected at ({center_x}, {center_y}) with radius {radius}")
-                            st.info(f"📏 Cropped from {img_np.shape[1]}x{img_np.shape[0]} to {x_end-x_start}x{y_end-y_start} pixels")
-                            
-                        except Exception as e:
-                            st.error(f"Error in ONH detection: {e}")
-                    else:
-                        st.info(f"Individual step processing: {step_option}")
-                
     else:
         st.warning("⚠️ Please upload an image to begin preprocessing.")
-        st.info("""
-        **Supported formats:** PNG, JPG, JPEG
-        
-        **Recommended image characteristics:**
-        - Fundus retinal images
-        - Clear optic disc visibility
-        - Good contrast and brightness
-        - Minimum resolution: 512x512 pixels
-        
-        **Improvements in this version:**
-        - ✅ **PROPER ONH CROPPING**: Actually cuts out ONLY the ONH region
-        - ✅ **Advanced detection**: Multi-method approach for accurate ONH location
-        - ✅ **Tight cropping**: Adjustable crop tightness (1.2x to 3.0x ONH radius)  
-        - ✅ **Clean results**: No background, only focused ONH area
-        - ✅ **Size optimization**: Automatic sizing for optimal analysis
-        - ✅ **Fallback methods**: Robust handling of difficult cases
-        - ✅ **Real-time preview**: See exactly what gets cropped
-        """)
 
 # ===================== SEGMENTATION ===================== #
 def Segmentation():
     st.title("Segmentation")
     
-    # Check if preprocessing is completed
     if 'preprocessed_image' not in st.session_state and 'vessel_preprocessed' not in st.session_state:
         st.warning("⚠️ Please complete preprocessing first.")
         return
@@ -865,21 +388,18 @@ def Segmentation():
     
     if st.button("🔁 Load Model & Run Segmentation"):
         st.info("🔄 Loading model and running segmentation...")
-        st.warning("⚠️ Model loading functionality needs to be implemented with actual model files.")
+        st.warning("⚠️ Model loading functionality needs to be implemented.")
         
-        # Placeholder for model loading and segmentation
-        with st.spinner("Processing... please wait"):
+        with st.spinner("Processing..."):
             if seg_type == "Optic Disc & Cup":
                 if 'preprocessed_image' in st.session_state:
                     image = st.session_state['preprocessed_image']
-                    st.image(image, caption="Preprocessed Image for OD/OC Segmentation", use_container_width=True)
-                    # Add actual segmentation logic here
+                    st.image(image, caption="Preprocessed for OD/OC Segmentation")
                     
             elif seg_type == "Blood Vessel":
                 if 'vessel_preprocessed' in st.session_state:
                     image = st.session_state['vessel_preprocessed']
-                    st.image(image, caption="Preprocessed Image for Vessel Segmentation", use_container_width=True)
-                    # Add actual segmentation logic here
+                    st.image(image, caption="Preprocessed for Vessel Segmentation")
         
         st.success("✅ Segmentation completed.")
 
@@ -891,7 +411,7 @@ def FeatureExtraction():
     
     if feat_type == "OD/OC Segmentation":
         st.markdown("""
-        **OD/OC Features to Extract:**
+        **OD/OC Features:**
         - Cup-to-Disc Ratio (CDR)
         - Disc area and cup area
         - Rim area
@@ -902,7 +422,7 @@ def FeatureExtraction():
         
     elif feat_type == "Vessel Segmentation":
         st.markdown("""
-        **Vessel Features to Extract:**
+        **Vessel Features:**
         - Vessel tortuosity
         - Skeleton length
         - Bifurcation points
@@ -960,39 +480,6 @@ def main():
         "Classification", 
         "Evaluation"
     ])
-    
-    # Add some styling
-    st.markdown("""
-    <style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .step-header {
-        font-size: 1.2rem;
-        color: #ff7f0e;
-        font-weight: bold;
-    }
-    .success-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        color: #155724;
-        margin: 1rem 0;
-    }
-    .info-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #d1ecf1;
-        border: 1px solid #bee5eb;
-        color: #0c5460;
-        margin: 1rem 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
     
     # Route to appropriate page
     if page == "Cover":
