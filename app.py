@@ -1,8 +1,12 @@
 import streamlit as st
 from PIL import Image
+import os
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+from model_architecture import Build_UNet  # OD/OC
+from vessel_architecture import Build_UNet # VESSEL
+import torch
+from torchvision import transforms
 
 # ===================== COVER PAGE ===================== #
 def Cover():
