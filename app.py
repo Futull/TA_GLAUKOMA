@@ -64,8 +64,6 @@ def About():
     """)
 
 # ===================== PREPROCESSING PAGE ===================== #
-
-# Fungsi untuk mendeteksi dan memotong area disc optik pada citra RGB tanpa mask
 def detect_and_crop_od(image, margin_ratio=1.0):
     # Mengubah citra ke grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -74,27 +72,30 @@ def detect_and_crop_od(image, margin_ratio=1.0):
     _, thresholded = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # Menyaring kontur dan mencari region-props
-    labeled = label(thresholded)
-    props = regionprops(labeled)
+    contours, _ = cv2.findContours(thresholded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    if len(props) == 0:
+    if len(contours) == 0:
         raise ValueError("Tidak ada disc optik yang terdeteksi.")
 
-    # Mengambil region terbesar (biasanya disc optik)
-    largest_region = max(props, key=lambda x: x.area)
-    y1, x1, y2, x2 = largest_region.bbox
-    center_x = (x1 + x2) // 2
-    center_y = (y1 + y2) // 2
-    box_size = int(max(x2 - x1, y2 - y1) * margin_ratio)
+    # Mengambil kontur terbesar (biasanya disc optik)
+    optic_disc_contour = max(contours, key=cv2.contourArea)
 
-    h, w = image.shape[:2]
-    x_start = max(center_x - box_size // 2, 0)
-    x_end = min(center_x + box_size // 2, w)
-    y_start = max(center_y - box_size // 2, 0)
-    y_end = min(center_y + box_size // 2, h)
+    # Menemukan bounding box dari kontur disc optik
+    x, y, w, h = cv2.boundingRect(optic_disc_contour)
 
-    img_crop = image[y_start:y_end, x_start:x_end]
-    return img_crop
+    # Menambahkan margin di sekitar bounding box
+    margin = int(max(w, h) * margin_ratio)
+
+    # Memastikan bounding box tidak keluar dari batas citra
+    zoom_x = max(0, x - margin)
+    zoom_y = max(0, y - margin)
+    zoom_w = min(w + 2 * margin, image.shape[1] - zoom_x)
+    zoom_h = min(h + 2 * margin, image.shape[0] - zoom_y)
+
+    # Memotong dan memperbesar bagian yang terdeteksi
+    cropped_zoomed_image = image[zoom_y:zoom_y + zoom_h, zoom_x:zoom_x + zoom_w]
+
+    return cropped_zoomed_image
 
 # Fungsi Resize (ubah ukuran gambar)
 def resize_image(image, target_size=(256, 256)):
@@ -124,6 +125,7 @@ def apply_clahe(image, clip_limit=2.0, tile_grid_size=(12, 12)):
 # Fungsi Median Filter
 def apply_median_filter(image, ksize=3):
     return cv2.medianBlur(image, ksize)
+
 
 # Fungsi Preprocessing untuk OD/OC Segmentation
 def preprocess_od_oc(image, margin_ratio=1.0):
@@ -187,6 +189,7 @@ def preprocess_vessel(image, margin_ratio=1.0):
 
     return final_image
 
+# ===================== Fungsi Streamlit ===================== #
 # ===================== Fungsi Streamlit ===================== #
 def Preprocessing():
     st.title("Preprocessing Steps")
