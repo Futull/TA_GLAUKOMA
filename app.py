@@ -377,8 +377,7 @@ def Preprocessing():
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        st.image(img_np, caption="Original")
-                        st.text("Input fundus image")
+                        st.image(img_np, caption="Original Image")
                     
                     with col2:
                         st.image(results['step1_resized'], caption="1.Resized 256 x 256")
@@ -512,15 +511,15 @@ def main():
         Cover()
     elif page == "About Glaucoma":
         About()
-    elif page == "Preprocessing":
+    elif page == "1.Preprocessing":
         Preprocessing()
-    elif page == "Segmentation":
+    elif page == "2.Segmentation":
         Segmentation()
-    elif page == "Feature Extraction":
+    elif page == "3.Feature Extraction":
         FeatureExtraction()
-    elif page == "Classification":
+    elif page == "4.Classification":
         Classification()
-    elif page == "Evaluation":
+    elif page == "5.Evaluation":
         Evaluation()
 
 if __name__ == "__main__":
