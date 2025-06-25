@@ -348,7 +348,7 @@ def Preprocessing():
                         with col1:
                             st.image(img_np, caption="Original")
                         
-                        with col2:
+                        with col2: 
                             st.image(results['step1_cropped'], caption="1.ONH Crop")
                         
                         with col3:
