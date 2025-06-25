@@ -429,7 +429,6 @@ def Segmentation():
     
     if st.button("🔁 Load Model & Run Segmentation"):
         st.info("🔄 Loading model and running segmentation...")
-        st.warning("⚠️ Model loading functionality needs to be implemented.")
         
         with st.spinner("Processing..."):
             if seg_type == "Optic Disc & Cup":
@@ -437,39 +436,135 @@ def Segmentation():
                     image = st.session_state['preprocessed_image']
                     st.image(image, caption="Preprocessed for OD/OC Segmentation")
 
-                    # Load and Run OD/OC Segmentation Model
-                    model_od_oc = Build_UNet(num_classes=3)  # Define your model architecture
-                    model_od_oc.load_state_dict(torch.load('fix_model_odoc.pt'))  # Load the saved model weights
-                    model_od_oc.eval()
-
-                    image_tensor = transforms.ToTensor()(image).unsqueeze(0)
-                    with torch.no_grad():
-                        output_od_oc = model_od_oc(image_tensor)
+                    # Check if model file exists
+                    model_path_odoc = 'fix_model_odoc.pt'
+                    if not os.path.exists(model_path_odoc):
+                        st.error(f"❌ Model file '{model_path_odoc}' not found!")
+                        st.info("Please ensure the model file is in the same directory as your app.py")
+                        return
                     
-                    # Visualize the output (segmentation result)
-                    st.image(output_od_oc.squeeze().cpu(), caption="OD/OC Segmentation Output")
-                    
+                    try:
+                        # Load and Run OD/OC Segmentation Model
+                        model_od_oc = Build_UNet(num_classes=3)  # Define your model architecture
+                        
+                        # Load model with error handling
+                        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                        model_od_oc.load_state_dict(torch.load(model_path_odoc, map_location=device))
+                        model_od_oc.to(device)
+                        model_od_oc.eval()
+                        
+                        # Prepare image tensor
+                        if len(image.shape) == 3:
+                            image_tensor = transforms.ToTensor()(image).unsqueeze(0).to(device)
+                        else:
+                            # Convert grayscale to RGB if needed
+                            image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+                            image_tensor = transforms.ToTensor()(image_rgb).unsqueeze(0).to(device)
+                        
+                        # Run inference
+                        with torch.no_grad():
+                            output_od_oc = model_od_oc(image_tensor)
+                            
+                            # Convert output to displayable format
+                            if isinstance(output_od_oc, torch.Tensor):
+                                output_np = output_od_oc.squeeze().cpu().numpy()
+                                
+                                # Handle multi-class output (3 classes: background, OD, OC)
+                                if len(output_np.shape) == 3:  # Multi-class output
+                                    # Get the class with highest probability for each pixel
+                                    segmentation_mask = np.argmax(output_np, axis=0)
+                                    
+                                    # Create colored visualization
+                                    colored_mask = np.zeros((*segmentation_mask.shape, 3), dtype=np.uint8)
+                                    colored_mask[segmentation_mask == 1] = [255, 0, 0]  # Red for OD
+                                    colored_mask[segmentation_mask == 2] = [0, 255, 0]  # Green for OC
+                                    
+                                    st.image(colored_mask, caption="OD/OC Segmentation Output (Red=OD, Green=OC)")
+                                    
+                                    # Store results in session state
+                                    st.session_state['od_oc_segmentation'] = segmentation_mask
+                                    st.session_state['od_oc_colored_mask'] = colored_mask
+                                    
+                                else:  # Single channel output
+                                    # Normalize to 0-255 range
+                                    output_display = ((output_np - output_np.min()) / (output_np.max() - output_np.min()) * 255).astype(np.uint8)
+                                    st.image(output_display, caption="OD/OC Segmentation Output")
+                                    st.session_state['od_oc_segmentation'] = output_display
+                        
+                        st.success("✅ OD/OC Segmentation completed successfully!")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error during OD/OC segmentation: {str(e)}")
+                        st.info("Please check if the model architecture matches the saved model.")
+                        
             elif seg_type == "Blood Vessel":
                 if 'vessel_preprocessed' in st.session_state:
                     image = st.session_state['vessel_preprocessed']
                     st.image(image, caption="Preprocessed for Vessel Segmentation")
 
-                    # Load and Run Vessel Segmentation Model
-                    model_vessel = Build_UNet(num_classes=1) 
-                    model_vessel.load_state_dict(torch.load('fix_model_vessel.pth'))  
-                    model_vessel.eval() 
-
-                    # Convert to 3 channels for model input (stacked green channel)
-                    image_tensor = np.stack([image] * 3, axis=-1)  # Stack to make it 3 channels
-                    image_tensor = transforms.ToTensor()(image_tensor).unsqueeze(0)
+                    # Check if model file exists
+                    model_path_vessel = 'fix_model_vessel.pth'
+                    if not os.path.exists(model_path_vessel):
+                        st.error(f"❌ Model file '{model_path_vessel}' not found!")
+                        st.info("Please ensure the model file is in the same directory as your app.py")
+                        return
                     
-                    with torch.no_grad():
-                        output_vessel = model_vessel(image_tensor)
-                    
-                    # Visualize the output (segmentation result)
-                    st.image(output_vessel.squeeze().cpu(), caption="Vessel Segmentation Output")
-                    
-        st.success("✅ Segmentation completed.")
+                    try:
+                        # Load and Run Vessel Segmentation Model
+                        model_vessel = Build_UNet(num_classes=1)  # Binary segmentation
+                        
+                        # Load model with error handling
+                        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                        model_vessel.load_state_dict(torch.load(model_path_vessel, map_location=device))
+                        model_vessel.to(device)
+                        model_vessel.eval()
+                        
+                        # Prepare image tensor
+                        if len(image.shape) == 3:
+                            # Convert to grayscale for vessel segmentation
+                            image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+                            # Stack to make it 3 channels (as expected by model)
+                            image_3ch = np.stack([image_gray] * 3, axis=-1)
+                        else:
+                            image_3ch = np.stack([image] * 3, axis=-1)
+                        
+                        image_tensor = transforms.ToTensor()(image_3ch).unsqueeze(0).to(device)
+                        
+                        # Run inference
+                        with torch.no_grad():
+                            output_vessel = model_vessel(image_tensor)
+                            
+                            # Convert output to displayable format
+                            if isinstance(output_vessel, torch.Tensor):
+                                output_np = output_vessel.squeeze().cpu().numpy()
+                                
+                                # Apply sigmoid for binary segmentation
+                                output_sigmoid = torch.sigmoid(output_vessel).squeeze().cpu().numpy()
+                                
+                                # Threshold to create binary mask
+                                binary_mask = (output_sigmoid > 0.5).astype(np.uint8) * 255
+                                
+                                # Create colored visualization
+                                colored_vessel = np.zeros((*binary_mask.shape, 3), dtype=np.uint8)
+                                colored_vessel[binary_mask == 255] = [0, 255, 0]  # Green for vessels
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.image(binary_mask, caption="Vessel Segmentation (Binary)")
+                                with col2:
+                                    st.image(colored_vessel, caption="Vessel Segmentation (Colored)")
+                                
+                                # Store results in session state
+                                st.session_state['vessel_segmentation'] = binary_mask
+                                st.session_state['vessel_colored_mask'] = colored_vessel
+                        
+                        st.success("✅ Vessel Segmentation completed successfully!")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error during vessel segmentation: {str(e)}")
+                        st.info("Please check if the model architecture matches the saved model.")
+                else:
+                    st.error("❌ No preprocessed vessel image found. Please complete vessel preprocessing first.")
 
 # ===================== OTHER PAGES ===================== #
 
