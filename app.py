@@ -495,48 +495,57 @@ def Segmentation():
         selected_task = st.selectbox("Select Segmentation Task", available_tasks)
     
     if selected_task == "OD/OC Segmentation":
-        st.subheader("OD/OC Segmentation")
-        
-        preprocessed_img = st.session_state['preprocessed_image']
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.image(preprocessed_img, caption="Preprocessed Image")
-        
-        if st.button("Run OD/OC Segmentation"):
-            with st.spinner("Loading model and running segmentation..."):
-                model = load_od_oc_model()
+    st.subheader("OD/OC Segmentation")
+    
+    preprocessed_img = st.session_state['preprocessed_image']
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(preprocessed_img, caption="Preprocessed Image")
+    
+    if st.button("Run OD/OC Segmentation"):
+        with st.spinner("Loading model and running segmentation..."):
+            model = load_od_oc_model()
+            
+            if model is not None:
+                prediction = predict_od_oc(model, preprocessed_img)
                 
-                if model is not None:
-                    prediction = predict_od_oc(model, preprocessed_img)
-                    
-                    # Convert prediction to displayable format
-                    if len(prediction.shape) == 3:
-                        od_mask = (prediction[0] > 0.5).astype(np.uint8) * 255
-                        oc_mask = (prediction[1] > 0.5).astype(np.uint8) * 255
-                        
-                        with col2:
-                            st.image(od_mask, caption="OD Segmentation")
-                        
-                        col3, col4 = st.columns(2)
-                        with col3:
-                            st.image(oc_mask, caption="OC Segmentation")
-                        
-                        # Save results
-                        st.session_state['od_mask'] = od_mask
-                        st.session_state['oc_mask'] = oc_mask
-                        st.session_state['segmentation_completed'] = True
-                        st.session_state['segmentation_type'] = 'OD/OC'
-                        
-                        st.success("✅ OD/OC segmentation completed!")
-                    else:
-                        mask = (prediction > 0.5).astype(np.uint8) * 255
-                        with col2:
-                            st.image(mask, caption="Segmentation Result")
-                        st.session_state['seg_mask'] = mask
-                        st.session_state['segmentation_completed'] = True
-                        st.session_state['segmentation_type'] = 'OD/OC'
-                        st.success("✅ Segmentation completed!")
+                # Convert prediction to colored segmentation map
+                if len(prediction.shape) == 3 and prediction.shape[0] > 1:
+                    # Multi-class output - get the class with highest probability
+                    seg_map = np.argmax(prediction, axis=0)
+                else:
+                    # Single output - assume it's already class indices
+                    seg_map = prediction.squeeze()
+                
+                # Create colored visualization
+                # 0 = Background (black), 1 = OD (red), 2 = OC (green)
+                colored_result = np.zeros((seg_map.shape[0], seg_map.shape[1], 3), dtype=np.uint8)
+                
+                # Background stays black (0, 0, 0)
+                colored_result[seg_map == 1] = [255, 0, 0]    # OD = Red
+                colored_result[seg_map == 2] = [0, 255, 0]    # OC = Green
+                
+                with col2:
+                    st.image(colored_result, caption="OD/OC Segmentation (Red: OD, Green: OC)")
+                
+                # Show legend
+                st.subheader("Legend")
+                legend_col1, legend_col2, legend_col3 = st.columns(3)
+                with legend_col1:
+                    st.markdown("🔴 **Red: Optic Disc (OD)**")
+                with legend_col2:
+                    st.markdown("🟢 **Green: Optic Cup (OC)**")
+                with legend_col3:
+                    st.markdown("⚫ **Black: Background**")
+                
+                # Save results
+                st.session_state['segmentation_map'] = seg_map
+                st.session_state['colored_segmentation'] = colored_result
+                st.session_state['segmentation_completed'] = True
+                st.session_state['segmentation_type'] = 'OD/OC'
+                
+                st.success("✅ OD/OC segmentation completed!")
     
     elif selected_task == "Vessel Segmentation":
         st.subheader("Vessel Segmentation")
