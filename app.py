@@ -262,21 +262,41 @@ def preprocess_od_oc_stepwise(image):
     
     return results
 
-def preprocess_vessel(image):
-    """Preprocessing for vessel segmentation"""
-    resized_image = resize_image(image, target_size=(256, 256))
+# ===================== PIPELINE PREPOS VESSEL STEPS ===================== #
+def preprocess_vessel_stepwise(image):
+    """
+    Apply step-by-step preprocessing for vessel segmentation
+    Returns a dictionary with all intermediate results
+    """
+    results = {}
     
+    # Step 1: Resize to 256x256
+    resized_image = resize_image(image, target_size=(256, 256))
+    results['step1_resized'] = resized_image
+    
+    # Step 2: Green channel extraction
     if len(resized_image.shape) == 3:
         green_channel = resized_image[:, :, 1]
     else:
         green_channel = resized_image
     
+    # Convert to 3-channel for display
     green_3ch = cv2.cvtColor(green_channel, cv2.COLOR_GRAY2RGB)
-    gamma_corrected_image = apply_gamma_correction(green_3ch, gamma=1.1)
-    clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(12, 12))
-    final_image = apply_median_filter(clahe_image, ksize=3)
+    results['step2_green'] = green_3ch
     
-    return final_image
+    # Step 3: Gamma correction
+    gamma_corrected_image = apply_gamma_correction(green_3ch, gamma=1.1)
+    results['step3_gamma'] = gamma_corrected_image
+    
+    # Step 4: CLAHE enhancement
+    clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(8, 8))
+    results['step4_clahe'] = clahe_image
+    
+    # Step 5: Median filter
+    final_image = apply_median_filter(clahe_image, ksize=3)
+    results['step5_final'] = final_image
+    
+    return results
 
 # ===================== PREPROCESSING PAGE ===================== #
 
@@ -344,31 +364,44 @@ def Preprocessing():
                         
         elif task == "Vessel Segmentation":
             if st.button("Apply Vessel Preprocessing"):
-                with st.spinner("Processing vessel segmentation preprocessing..."):
-                    processed_vessel = preprocess_vessel(img_np)
+                with st.spinner("Processing vessel segmentation..."):
+                    results = preprocess_vessel_stepwise(img_np)
                     
-                    st.session_state['vessel_preprocessed'] = processed_vessel
+                    st.session_state['vessel_preprocessed'] = results['step5_final']
+                    st.session_state['vessel_results'] = results
                     
-                    col1, col2 = st.columns(2)
+                    # Display all steps in order
+                    st.subheader("Vessel Preprocessing Pipeline Results")
+                    
+                    # Show 6 steps in 3 columns x 2 rows
+                    col1, col2, col3 = st.columns(3)
+                    
                     with col1:
                         st.image(img_np, caption="Original")
+                        st.text("Input fundus image")
+                    
                     with col2:
-                        st.image(processed_vessel, caption="Vessel Preprocessed")
+                        st.image(results['step1_resized'], caption="1.Resized 256 x 256")
+                    
+                    with col3:
+                        st.image(results['step2_green'], caption="2.Green Channel")
+                    
+                    # Second row
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.image(results['step3_gamma'], caption="3.Gamma Correct")
+                    
+                    with col2:
+                        st.image(results['step4_clahe'], caption="4.CLAHE")
+                    
+                    with col3:
+                        st.image(results['step5_final'], caption="5.Median Filter")
                     
                     st.success("✅ Vessel preprocessing completed!")
-                    
-                    st.info("""
-                    **Processing Steps:**
-                    1. Resize to 256×256
-                    2. Green channel extraction  
-                    3. Gamma correction (γ=1.1)
-                    4. CLAHE enhancement
-                    5. Median filter
-                    """)
         
     else:
         st.warning("⚠️ Please upload an image to begin preprocessing.")
-
 # ===================== SEGMENTATION ===================== #
 def Segmentation():
     st.title("Segmentation")
