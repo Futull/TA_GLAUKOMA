@@ -128,7 +128,7 @@ class MergeLayer(nn.Module):
         return torch.cat([x, input_resized], dim=1)  # Output: [B, 64+3=67, H, W]
 
 # ===== Final Model =====
-class Build_UNet(nn.Module):
+class Build_UNet_Vessel(nn.Module):
     def __init__(self, num_classes=1):  # Ganti sesuai jumlah kelas
         super().__init__()
         self.encoder = Encoder()
@@ -154,7 +154,7 @@ class Build_UNet(nn.Module):
         return out
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = Build_UNet(num_classes=1).to(device)
+model = Build_UNet_Vessel(num_classes=1).to(device)
 summary(model, (3, 256, 256))
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Total parameters: {total_params:,}")
