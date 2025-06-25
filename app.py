@@ -67,7 +67,7 @@ def About():
 
 # ===================== PREPROCESSING FUNCTIONS ===================== #
 # ===================== PREPOS OD/OC FUNCTIONS ===================== #
-def crop_optic_disc_improved(image, crop_factor=0.5):
+def crop_optic_disc_improved(image, crop_factor=1.0):
     """
     Crop around the ONH with proper margins using grayscale and thresholding method.
     Output is in RGB format for Streamlit visualization.
@@ -240,7 +240,7 @@ def preprocess_od_oc_stepwise(image):
     
     # Step 1: Crop ONH region
     try:
-        cropped_image, detection_info, binary_rgb_image = crop_optic_disc_improved(image, crop_factor=0.5)
+        cropped_image, detection_info, binary_rgb_image = crop_optic_disc_improved(image, crop_factor=1.0)
         
         # Menyimpan hasil pemotongan, informasi deteksi, dan mask biner RGB
         results['step1_cropped'] = cropped_image
