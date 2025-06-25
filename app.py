@@ -388,7 +388,7 @@ def Segmentation():
         st.subheader("OD/OC Segmentation")
     
         preprocessed_img = st.session_state['preprocessed_image']
-     
+    
         col1, col2 = st.columns(2)
         with col1:
             st.image(preprocessed_img, caption="Preprocessed Image")
@@ -525,22 +525,22 @@ def main():
     st.sidebar.title("👁 Navigation")
     page = st.sidebar.selectbox("Go to Page", [
         "Cover", 
-        "1.Preprocessing", 
-        "2.Segmentation", 
-        "3.Feature Extraction", 
-        "4.Classification", 
+        "Preprocessing", 
+        "Segmentation", 
+        "Feature Extraction", 
+        "Classification", 
     ])
     
     # Route to appropriate page
     if page == "Cover":
         Cover()
-    elif page == "1.Preprocessing":
+    elif page == "Preprocessing":
         Preprocessing()
-    elif page == "2.Segmentation":
+    elif page == "Segmentation":
         Segmentation()
-    elif page == "3.Feature Extraction":
+    elif page == "Feature Extraction":
         FeatureExtraction()
-    elif page == "4.Classification":
+    elif page == "Classification":
         Classification()
 
 if __name__ == "__main__":
