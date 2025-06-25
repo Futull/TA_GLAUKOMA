@@ -40,7 +40,6 @@ def Cover():
         "- Go to **Segmentation** to choose between OD/OC or Vessel\n"
         "- Go to **Feature Extraction** to analyze CDR, vessel tortuosity, etc.\n"
         "- Use **Classification** to predict glaucoma severity\n"
-        "- Visit **About Glaucoma** to learn more"
     )
 
 # ===================== ABOUT PAGE ===================== #
@@ -512,8 +511,7 @@ def main():
     
     st.sidebar.title("👁️ Navigation")
     page = st.sidebar.selectbox("Go to Page", [
-        "Cover", 
-        "About Glaucoma", 
+        "Cover",  
         "Preprocessing", 
         "Segmentation", 
         "Feature Extraction", 
@@ -524,8 +522,6 @@ def main():
     # Route to appropriate page
     if page == "Cover":
         Cover()
-    elif page == "About Glaucoma":
-        About()
     elif page == "Preprocessing":
         Preprocessing()
     elif page == "Segmentation":
