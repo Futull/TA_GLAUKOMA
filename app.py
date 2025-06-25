@@ -434,12 +434,37 @@ def Segmentation():
                 if 'preprocessed_image' in st.session_state:
                     image = st.session_state['preprocessed_image']
                     st.image(image, caption="Preprocessed for OD/OC Segmentation")
+
+                    # Load and Run OD/OC Segmentation Model
+                    model_od_oc = torch.load('fix_model_odoc.pth')  
+                    model_od_oc.eval()
+
+                    image_tensor = transforms.ToTensor()(image).unsqueeze(0)
+                    with torch.no_grad():
+                        output_od_oc = model_od_oc(image_tensor)
+                    
+                    # Visualize the output (segmentation result)
+                    st.image(output_od_oc.squeeze().cpu(), caption="OD/OC Segmentation Output")
                     
             elif seg_type == "Blood Vessel":
                 if 'vessel_preprocessed' in st.session_state:
                     image = st.session_state['vessel_preprocessed']
                     st.image(image, caption="Preprocessed for Vessel Segmentation")
-        
+
+                    # Load and Run Vessel Segmentation Model
+                    model_vessel = torch.load('fix_model_vessel.pth')  
+                    model_vessel.eval()  # Set to evaluation mode
+
+                    # Convert to 3 channels for model input (stacked green channel)
+                    image_tensor = np.stack([image] * 3, axis=-1)  # Stack to make it 3 channels
+                    image_tensor = transforms.ToTensor()(image_tensor).unsqueeze(0)
+                    
+                    with torch.no_grad():
+                        output_vessel = model_vessel(image_tensor)
+                    
+                    # Visualize the output (segmentation result)
+                    st.image(output_vessel.squeeze().cpu(), caption="Vessel Segmentation Output")
+                    
         st.success("✅ Segmentation completed.")
 
 # ===================== OTHER PAGES ===================== #
