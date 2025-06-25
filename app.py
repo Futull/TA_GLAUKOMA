@@ -69,48 +69,54 @@ def About():
 # ===================== PREPOS OD/OC FUNCTIONS ===================== #
 def crop_optic_disc_improved(image, crop_factor=1.5):
     """
-    Crop around the ONH with proper margins
+    Crop around the ONH with proper margins using grayscale and thresholding method.
+    Output is in RGB format for Streamlit visualization.
     """
     try:
-        # Convert to LAB color space for better detection
+        # Convert the image to grayscale (instead of LAB)
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
-        l_channel = lab[:, :, 0]
         
-        # Find the brightest circular region (ONH is brightest)
-        blurred = cv2.GaussianBlur(l_channel, (15, 15), 0)
+        # Apply Gaussian Blur to reduce noise
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         
-        # Find the absolute brightest point
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
+        # Apply thresholding to extract the optic disc
+        _, binary_image = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
         
-        # Use threshold to get bright regions
-        threshold_value = max_val * 0.85
-        _, bright_mask = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
-        
-        # Morphological operations
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
-        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, kernel)
-        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, kernel)
+        # Convert binary image to RGB (3 channels)
+        binary_rgb_image = cv2.cvtColor(binary_image, cv2.COLOR_GRAY2RGB)
         
         # Find contours
-        contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         if contours:
-            largest_contour = max(contours, key=cv2.contourArea)
-            (x, y), radius = cv2.minEnclosingCircle(largest_contour)
-            center_x, center_y = int(x), int(y)
-            radius = int(radius)
+            # Select the largest contour
+            optic_disc_contour = max(contours, key=cv2.contourArea)
             
-            if radius < min(image.shape[:2]) // 15:
-                radius = min(image.shape[:2]) // 12
+            # Create a mask for the optic disc
+            mask = np.zeros_like(gray)
+            cv2.drawContours(mask, [optic_disc_contour], -1, (255, 255, 255), thickness=cv2.FILLED)
+            
+            # Apply the mask to extract the optic disc region
+            optic_disc = cv2.bitwise_and(image, image, mask=mask)
+            
+            # Calculate the bounding rectangle for the optic disc contour
+            x, y, w, h = cv2.boundingRect(optic_disc_contour)
+            
+            # Calculate the center of the bounding rectangle
+            center_x = x + w // 2
+            center_y = y + h // 2
+            
+            # Calculate the radius of the bounding rectangle
+            radius = max(w // 2, h // 2)
         else:
-            center_x, center_y = max_loc
-            radius = min(image.shape[:2]) // 12
+            # Fallback if no contour found
+            center_x, center_y = image.shape[1] // 2, image.shape[0] // 2
+            radius = min(image.shape[:2]) // 10
         
         # Calculate crop with margins
         crop_radius = int(radius * crop_factor)
         
-        # Ensure bounds
+        # Ensure bounds are within image size
         x_start = max(0, center_x - crop_radius)
         y_start = max(0, center_y - crop_radius)
         x_end = min(image.shape[1], center_x + crop_radius)
@@ -119,7 +125,7 @@ def crop_optic_disc_improved(image, crop_factor=1.5):
         # Crop the image
         cropped_image = image[y_start:y_end, x_start:x_end]
         
-        # Make it square
+        # Make it square if needed
         h, w = cropped_image.shape[:2]
         if h != w:
             size = min(h, w)
@@ -127,14 +133,15 @@ def crop_optic_disc_improved(image, crop_factor=1.5):
             start_w = (w - size) // 2
             cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
         
-        return cropped_image, (center_x, center_y, radius)
-        
+        # Return the cropped image and details in RGB format
+        return cropped_image, (center_x, center_y, radius), binary_rgb_image
+    
     except Exception as e:
         st.warning(f"ONH detection failed: {e}. Using fallback method.")
         
         # Fallback method
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        blurred = cv2.GaussianBlur(gray, (21, 21), 0)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
         
         center_x, center_y = max_loc
@@ -148,7 +155,7 @@ def crop_optic_disc_improved(image, crop_factor=1.5):
         
         cropped_image = image[y_start:y_end, x_start:x_end]
         
-        # Make square
+        # Make it square
         h, w = cropped_image.shape[:2]
         if h != w:
             size = min(h, w)
@@ -156,7 +163,11 @@ def crop_optic_disc_improved(image, crop_factor=1.5):
             start_w = (w - size) // 2
             cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
         
-        return cropped_image, (center_x, center_y, radius)
+        # Convert to RGB (even fallback images will be in RGB format)
+        binary_rgb_image = cv2.cvtColor(binary_image, cv2.COLOR_GRAY2RGB)
+        
+        return cropped_image, (center_x, center_y, radius), binary_rgb_image
+
 
 def resize_image(image, target_size=(256, 256)):
     """Resize image to target size"""
@@ -229,9 +240,13 @@ def preprocess_od_oc_stepwise(image):
     
     # Step 1: Crop ONH region
     try:
-        cropped_image, detection_info = crop_optic_disc_improved(image, crop_factor=1.5)
+        cropped_image, detection_info, binary_rgb_image = crop_optic_disc_improved(image, crop_factor=1.5)
+        
+        # Menyimpan hasil pemotongan, informasi deteksi, dan mask biner RGB
         results['step1_cropped'] = cropped_image
         results['detection_info'] = detection_info
+        results['binary_rgb_mask'] = binary_rgb_image
+        
     except Exception as e:
         st.error(f"Error in Step 1 (ONH Cropping): {e}")
         return None
