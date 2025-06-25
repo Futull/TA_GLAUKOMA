@@ -495,7 +495,7 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    st.sidebar.title("📊 Navigation")
+    st.sidebar.title("👁️ Navigation")
     page = st.sidebar.selectbox("Go to Page", [
         "Cover", 
         "About Glaucoma", 
