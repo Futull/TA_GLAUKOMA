@@ -28,12 +28,13 @@ def Cover():
 
     st.sidebar.info(
         "Navigation Instructions:\n"
-        "- Go to **Preprocessing** to enhance image quality\n"
-        "- Go to **Segmentation** to choose between OD/OC or Vessel\n"
-        "- Go to **Feature Extraction** to analyze CDR, vessel tortuosity, etc.\n"
-        "- Use **Classification** to predict glaucoma severity\n"
-        "- Visit **About Glaucoma** to learn more"
+        "- Go to *Preprocessing* to enhance image quality\n"
+        "- Go to *Segmentation* to choose between OD/OC or Vessel\n"
+        "- Go to *Feature Extraction* to analyze CDR, vessel tortuosity, etc.\n"
+        "- Use *Classification* to predict glaucoma severity\n"
+        "- Visit *About Glaucoma* to learn more"
     )
+
 
 # ===================== ABOUT PAGE ===================== #
 def About():
