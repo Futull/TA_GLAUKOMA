@@ -310,38 +310,30 @@ def Preprocessing():
                         
                         with col1:
                             st.image(img_np, caption="Original")
-                            st.text("Input fundus image")
                         
                         with col2:
-                            st.image(results['step1_cropped'], caption="ONH Crop")
-                            st.text("Brightest region detection")
+                            st.image(results['step1_cropped'], caption="1. ONH Crop")
                         
                         with col3:
-                            st.image(results['step2_resized'], caption="Resized")
-                            st.text("256x256 pixels")
+                            st.image(results['step2_resized'], caption="2. Resized 256 x 256")
                         
                         with col4:
-                            st.image(results['step3_sharpened'], caption="Sharpening")
-                            st.text("Unsharp mask + High-pass")
+                            st.image(results['step3_sharpened'], caption="3. Sharpening")
                         
                         # Second row
                         col1, col2, col3, col4 = st.columns(4)
                         
                         with col1:
-                            st.image(results['step4_color_norm'], caption="Color Norm")
-                            st.text("Per-channel normalization")
+                            st.image(results['step4_color_norm'], caption="4. RGB Color Normalization")
                         
                         with col2:
-                            st.image(results['step5_gamma'], caption="Gamma")
-                            st.text("Gamma correction (γ=1.1)")
+                            st.image(results['step5_gamma'], caption="5. Gamma Correct")
                         
                         with col3:
-                            st.image(results['step6_clahe'], caption="CLAHE")
-                            st.text("Adaptive histogram eq.")
+                            st.image(results['step6_clahe'], caption="6. CLAHE")
                         
                         with col4:
-                            st.image(results['step7_final'], caption="Final")
-                            st.text("Median filter + Complete")
+                            st.image(results['step7_final'], caption="7. Median Filter")
                         
                         st.success("✅ OD/OC preprocessing completed!")
                         
