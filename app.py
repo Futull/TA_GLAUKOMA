@@ -279,6 +279,7 @@ def Evaluation():
     st.write("Model evaluation metrics will be shown here.")
 
 # ===================== MAIN FUNCTION ===================== #
+# ===================== MAIN FUNCTION ===================== #
 def main():
     st.set_page_config(
         page_title="Glaucoma Detection System",
