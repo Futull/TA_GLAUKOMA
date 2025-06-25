@@ -449,26 +449,8 @@ def FeatureExtraction():
     feat_type = st.selectbox("Feature Source", ["OD/OC Segmentation", "Vessel Segmentation"])
     
     if feat_type == "OD/OC Segmentation":
-        st.markdown("""
-        **OD/OC Features:**
-        - Cup-to-Disc Ratio (CDR)
-        - Disc area and cup area
-        - Rim area
-        - Eccentricity
-        - Solidity
-        - Aspect ratio
-        """)
         
     elif feat_type == "Vessel Segmentation":
-        st.markdown("""
-        **Vessel Features:**
-        - Vessel tortuosity
-        - Skeleton length
-        - Bifurcation points
-        - Vessel density
-        - Average vessel width
-        - Fractal dimension
-        """)
 
 def Classification():
     st.title("Glaucoma Classification")
@@ -485,20 +467,6 @@ def Classification():
     - 🔴 Severe Glaucoma
     """)
 
-def Evaluation():
-    st.title("Model Evaluation")
-    st.markdown("""
-    **Evaluation Metrics:**
-    - Confusion Matrix
-    - Accuracy
-    - Sensitivity (Recall)
-    - Specificity
-    - Precision
-    - F1-Score
-    - ROC Curve
-    - AUC Score
-    """)
-
 # ===================== PAGE ROUTING ===================== #
 
 def main():
@@ -512,11 +480,10 @@ def main():
     st.sidebar.title("👁️ Navigation")
     page = st.sidebar.selectbox("Go to Page", [
         "Cover",  
-        "Preprocessing", 
-        "Segmentation", 
-        "Feature Extraction", 
-        "Classification", 
-        "Evaluation"
+        "1.Preprocessing", 
+        "2.Segmentation", 
+        "3.Feature Extraction", 
+        "4.Classification", 
     ])
     
     # Route to appropriate page
@@ -530,8 +497,6 @@ def main():
         FeatureExtraction()
     elif page == "Classification":
         Classification()
-    elif page == "Evaluation":
-        Evaluation()
 
 if __name__ == "__main__":
     main()
