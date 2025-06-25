@@ -1,5 +1,5 @@
 streamlit
-numpyv 
+numpy
 pandas
 opencv-python-headless
 matplotlib
