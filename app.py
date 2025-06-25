@@ -5,7 +5,7 @@ from skimage.measure import label, regionprops
 from skimage.morphology import disk, opening, closing
 from skimage.filters import gaussian
 from model_architecture import Build_UNet  # OD/OC
-from vessel_architecture import Build_UNet  # VESSEL
+from vessel_architecture import Build_UNet_Vessel  # VESSEL
 import cv2
 import numpy as np
 import torch
