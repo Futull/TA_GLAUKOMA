@@ -40,7 +40,7 @@ def Cover():
     st.sidebar.info(
         "Navigation Instructions:\n"
         "- Go to *Preprocessing* to enhance image quality\n"
-        "- Go to *Segmentation* to choose between OD/OC or Vessel\n"
+        "- Go to *Segmentation* To detect and identify the Optic Disc (OD), Optic Cup (OC), and retinal blood vessels\n"
         "- Go to *Feature Extraction* to analyze CDR, vessel tortuosity, etc.\n"
         "- Use *Classification* to predict glaucoma severity\n"
     )
