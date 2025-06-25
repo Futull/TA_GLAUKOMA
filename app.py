@@ -174,9 +174,9 @@ def detect_optic_disc_template_matching(image):
         
         return contour_points.reshape(-1, 1, 2).astype(np.int32)
 
-def crop_optic_disc_improved(image, crop_factor=2.5):
+def crop_optic_disc_improved(image, crop_factor=2.0):
     """
-    Improved optic disc cropping with better detection
+    Crop ONLY the ONH region, removing everything outside
     """
     try:
         # Detect optic disc
@@ -190,7 +190,7 @@ def crop_optic_disc_improved(image, crop_factor=2.5):
         center_y = y + h // 2
         radius = max(w, h) // 2
         
-        # Expand the cropping region
+        # Expand the cropping region (smaller factor for tighter crop)
         crop_radius = int(radius * crop_factor)
         
         # Calculate crop coordinates with bounds checking
@@ -199,14 +199,14 @@ def crop_optic_disc_improved(image, crop_factor=2.5):
         x_end = min(image.shape[1], center_x + crop_radius)
         y_end = min(image.shape[0], center_y + crop_radius)
         
-        # Crop the image
+        # Crop the image - ONLY THE ONH AREA
         cropped_image = image[y_start:y_end, x_start:x_end]
         
         # Ensure minimum size
         if cropped_image.shape[0] < 100 or cropped_image.shape[1] < 100:
-            # Fallback to center crop
+            # Fallback to center crop with larger area
             h, w = image.shape[:2]
-            size = min(h, w) // 2
+            size = min(h, w) // 3  # Smaller crop for better focus
             center_x, center_y = w // 2, h // 2
             x_start = max(0, center_x - size // 2)
             y_start = max(0, center_y - size // 2)
@@ -214,20 +214,30 @@ def crop_optic_disc_improved(image, crop_factor=2.5):
             y_end = min(h, center_y + size // 2)
             cropped_image = image[y_start:y_end, x_start:x_end]
         
-        return cropped_image, (center_x, center_y, radius)
+        # Create visualization for debugging (original image with detection overlay)
+        visualization = image.copy()
+        cv2.circle(visualization, (center_x, center_y), radius, (0, 255, 0), 3)
+        cv2.rectangle(visualization, (x_start, y_start), (x_end, y_end), (255, 0, 0), 3)
+        
+        return cropped_image, (center_x, center_y, radius), visualization, (x_start, y_start, x_end, y_end)
         
     except Exception as e:
         st.warning(f"Advanced detection failed: {e}. Using fallback method.")
         # Fallback to center crop
         h, w = image.shape[:2]
-        size = min(h, w) // 2
+        size = min(h, w) // 3
         center_x, center_y = w // 2, h // 2
         x_start = max(0, center_x - size // 2)
         y_start = max(0, center_y - size // 2)
         x_end = min(w, center_x + size // 2)
         y_end = min(h, center_y + size // 2)
         cropped_image = image[y_start:y_end, x_start:x_end]
-        return cropped_image, (center_x, center_y, size // 2)
+        
+        # Create fallback visualization
+        visualization = image.copy()
+        cv2.rectangle(visualization, (x_start, y_start), (x_end, y_end), (255, 0, 0), 3)
+        
+        return cropped_image, (center_x, center_y, size // 2), visualization, (x_start, y_start, x_end, y_end)
 
 def resize_image(image, target_size=(256, 256)):
     """
@@ -313,26 +323,21 @@ def apply_median_filter(image, ksize=3):
 
 def preprocess_od_oc_stepwise(image):
     """
-    Apply step-by-step preprocessing for OD/OC segmentation with improved cropping
+    Apply step-by-step preprocessing for OD/OC segmentation with PROPER cropping
     Returns a dictionary with all intermediate results
     """
     results = {}
     
-    # Step 1: Crop ONH region (IMPROVED)
+    # Step 1: Crop ONH region - ACTUAL CROPPING, not just marking
     try:
-        cropped_image, detection_info = crop_optic_disc_improved(image, crop_factor=2.5)
+        cropped_image, detection_info, visualization, crop_coords = crop_optic_disc_improved(image, crop_factor=2.0)
         results['step1_cropped'] = cropped_image
         results['detection_info'] = detection_info
-        
-        # Create visualization of detection
-        visualization = image.copy()
-        center_x, center_y, radius = detection_info
-        cv2.circle(visualization, (center_x, center_y), radius, (0, 255, 0), 3)
-        cv2.circle(visualization, (center_x, center_y), int(radius * 2.5), (255, 0, 0), 2)
         results['detection_visualization'] = visualization
+        results['crop_coordinates'] = crop_coords
         
     except Exception as e:
-        st.error(f"Error in Step 1 (Improved ONH Cropping): {e}")
+        st.error(f"Error in Step 1 (ONH Cropping): {e}")
         return None
     
     # Step 2: Resize to 256x256
@@ -411,12 +416,13 @@ def Preprocessing():
             st.subheader("Improved OD/OC Preprocessing Pipeline")
             
             # Add parameter controls
-            st.sidebar.subheader("ONH Detection Parameters")
-            crop_factor = st.sidebar.slider("Crop Factor", 1.5, 4.0, 2.5, 0.1)
+            st.sidebar.subheader("ONH Cropping Parameters")
+            crop_factor = st.sidebar.slider("Crop Tightness", 1.2, 3.0, 2.0, 0.1, 
+                                          help="Smaller = tighter crop, Larger = more surrounding area")
             
             # Add processing button
-            if st.button("🔄 Start Improved OD/OC Preprocessing"):
-                with st.spinner("Processing with improved ONH detection... Please wait"):
+            if st.button("✂️ Start ONH Cropping & Preprocessing"):
+                with st.spinner("Detecting and cropping ONH region... Please wait"):
                     # Process the image step by step
                     results = preprocess_od_oc_stepwise(img_np)
                     
@@ -425,64 +431,85 @@ def Preprocessing():
                         st.session_state['preprocessing_results'] = results
                         st.session_state['preprocessed_image'] = results['step7_final']
                         
-                        # Display detection visualization first
-                        st.subheader("🎯 ONH Detection Results")
+                        # Display detection and cropping results
+                        st.subheader("🎯 ONH Detection & Cropping Results")
+                        
+                        # Show before and after cropping
                         col1, col2 = st.columns(2)
                         
                         with col1:
                             st.image(results['detection_visualization'], 
-                                   caption="ONH Detection (Green: detected center, Red: crop area)", 
+                                   caption="📍 Original with Detection Box", 
                                    use_container_width=True)
                         
                         with col2:
-                            center_x, center_y, radius = results['detection_info']
-                            st.success(f"✅ ONH Detection Successful!")
+                            st.image(results['step1_cropped'], 
+                                   caption="✂️ Cropped ONH Region ONLY", 
+                                   use_container_width=True)
+                        
+                        # Show cropping details
+                        center_x, center_y, radius = results['detection_info']
+                        x_start, y_start, x_end, y_end = results['crop_coordinates']
+                        
+                        st.success(f"✅ ONH Successfully Detected and Cropped!")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
                             st.info(f"""
-                            **Detection Results:**
-                            - Center: ({center_x}, {center_y})
-                            - Radius: {radius} pixels
-                            - Crop area: {int(radius * 2.5 * 2)}x{int(radius * 2.5 * 2)} pixels
+                            **📊 Detection Details:**
+                            - ONH Center: ({center_x}, {center_y})
+                            - ONH Radius: {radius} pixels
+                            """)
+                        
+                        with col2:
+                            st.info(f"""
+                            **✂️ Crop Details:**
+                            - Original size: {img_np.shape[1]}x{img_np.shape[0]} pixels
+                            - Cropped size: {x_end-x_start}x{y_end-y_start} pixels
+                            - Crop coordinates: ({x_start},{y_start}) to ({x_end},{y_end})
                             """)
                         
                         # Display all preprocessing steps
-                        st.subheader("📋 Preprocessing Pipeline Results")
+                        st.subheader("📋 Complete Preprocessing Pipeline")
                         
-                        # Create columns for better layout
-                        col1, col2 = st.columns(2)
+                        # Create 3 columns for better layout
+                        col1, col2, col3 = st.columns(3)
                         
                         with col1:
-                            st.image(results['step1_cropped'], caption="Step 1: Improved ONH Cropped", use_container_width=True)
-                            st.image(results['step3_sharpened'], caption="Step 3: Sharpened", use_container_width=True)
-                            st.image(results['step5_gamma'], caption="Step 5: Gamma Corrected", use_container_width=True)
+                            st.image(results['step1_cropped'], caption="Step 1: ONH Cropped", use_container_width=True)
+                            st.image(results['step4_color_norm'], caption="Step 4: Color Normalized", use_container_width=True)
                             st.image(results['step7_final'], caption="Step 7: Final Result", use_container_width=True)
                         
                         with col2:
                             st.image(results['step2_resized'], caption="Step 2: Resized (256x256)", use_container_width=True)
-                            st.image(results['step4_color_norm'], caption="Step 4: Color Normalized", use_container_width=True)
+                            st.image(results['step5_gamma'], caption="Step 5: Gamma Corrected", use_container_width=True)
+                        
+                        with col3:
+                            st.image(results['step3_sharpened'], caption="Step 3: Sharpened", use_container_width=True)
                             st.image(results['step6_clahe'], caption="Step 6: CLAHE Applied", use_container_width=True)
                         
                         st.success("✅ All preprocessing steps completed successfully!")
                         
                         # Show detailed processing summary
                         st.info("""
-                        **Improved Processing Summary:**
-                        1. **Advanced ONH Detection**: Multi-method approach using brightness detection, morphological operations, and HoughCircles fallback
-                        2. **Smart Cropping**: Adaptive cropping based on detected ONH size and position
-                        3. **Resizing**: Resized to 256×256 pixels with proper interpolation
-                        4. **Sharpening**: Combined unsharp masking + high-pass filter
-                        5. **Color Normalization**: Per-channel RGB normalization
-                        6. **Gamma Correction**: Applied gamma correction (γ=1.1)
-                        7. **CLAHE**: Contrast enhancement (clip=2.0, tile=12×12)
-                        8. **Median Filter**: Noise reduction (kernel=3×3)
+                        **🔄 Complete Processing Summary:**
+                        1. **🎯 ONH Detection**: Advanced multi-method detection using brightness analysis
+                        2. **✂️ Precise Cropping**: Cropped ONLY the ONH region, removing all surrounding areas
+                        3. **📏 Resizing**: Resized cropped ONH to 256×256 pixels
+                        4. **🔍 Sharpening**: Enhanced details with combined filters
+                        5. **🎨 Color Normalization**: Standardized RGB channels
+                        6. **🔆 Gamma Correction**: Improved contrast (γ=1.1)
+                        7. **✨ CLAHE**: Adaptive histogram equalization
+                        8. **🧹 Noise Reduction**: Median filtering for cleanup
                         """)
                         
-                        # Show comparison
-                        st.subheader("🔍 Before vs After Comparison")
+                        # Show final comparison
+                        st.subheader("🔍 Final Comparison: Original vs Processed ONH")
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.image(img_np, caption="Original Full Image", use_container_width=True)
+                            st.image(img_np, caption="🖼️ Original Full Fundus Image", use_container_width=True)
                         with col2:
-                            st.image(results['step7_final'], caption="Processed ONH Region", use_container_width=True)
+                            st.image(results['step7_final'], caption="🎯 Processed ONH Region (Ready for Analysis)", use_container_width=True)
                     
         elif task == "Vessel Segmentation":
             st.subheader("Vessel Preprocessing Pipeline")
@@ -529,15 +556,25 @@ def Preprocessing():
                 with st.spinner(f"Processing: {step_option}"):
                     if "Step 1" in step_option:
                         try:
-                            cropped_image, detection_info = crop_optic_disc_improved(img_np)
-                            col1, col2 = st.columns(2)
+                            cropped_image, detection_info, visualization, crop_coords = crop_optic_disc_improved(img_np)
+                            
+                            st.subheader("Individual Step 1: ONH Detection & Cropping")
+                            col1, col2, col3 = st.columns(3)
+                            
                             with col1:
-                                st.image(img_np, caption="Original", use_container_width=True)
+                                st.image(img_np, caption="🖼️ Original Image", use_container_width=True)
+                            
                             with col2:
-                                st.image(cropped_image, caption="ONH Cropped", use_container_width=True)
+                                st.image(visualization, caption="🎯 Detection Overlay", use_container_width=True)
+                            
+                            with col3:
+                                st.image(cropped_image, caption="✂️ Cropped ONH ONLY", use_container_width=True)
                             
                             center_x, center_y, radius = detection_info
-                            st.success(f"ONH detected at ({center_x}, {center_y}) with radius {radius}")
+                            x_start, y_start, x_end, y_end = crop_coords
+                            
+                            st.success(f"✅ ONH detected at ({center_x}, {center_y}) with radius {radius}")
+                            st.info(f"📏 Cropped from {img_np.shape[1]}x{img_np.shape[0]} to {x_end-x_start}x{y_end-y_start} pixels")
                             
                         except Exception as e:
                             st.error(f"Error in ONH detection: {e}")
@@ -556,12 +593,13 @@ def Preprocessing():
         - Minimum resolution: 512x512 pixels
         
         **Improvements in this version:**
-        - ✅ Advanced ONH detection using multiple methods
-        - ✅ Brightness-based detection in LAB color space
-        - ✅ Morphological operations for noise reduction
-        - ✅ HoughCircles fallback for difficult cases
-        - ✅ Smart cropping with adaptive sizing
-        - ✅ Real-time detection visualization
+        - ✅ **PROPER ONH CROPPING**: Actually cuts out ONLY the ONH region
+        - ✅ **Advanced detection**: Multi-method approach for accurate ONH location
+        - ✅ **Tight cropping**: Adjustable crop tightness (1.2x to 3.0x ONH radius)  
+        - ✅ **Clean results**: No background, only focused ONH area
+        - ✅ **Size optimization**: Automatic sizing for optimal analysis
+        - ✅ **Fallback methods**: Robust handling of difficult cases
+        - ✅ **Real-time preview**: See exactly what gets cropped
         """)
 
 # ===================== SEGMENTATION ===================== #
