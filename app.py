@@ -5,7 +5,7 @@ from skimage.measure import label, regionprops
 from skimage.morphology import disk, opening, closing
 from skimage.filters import gaussian
 import cv2
-import numpy as np
+import numpy as np 
 import torch
 from torchvision import transforms
 import matplotlib.pyplot as plt
