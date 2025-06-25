@@ -49,7 +49,7 @@ class MiddleConv(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=2, dilation=2)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu1 = nn.LeakyReLU()
-        self.dropout = nn.Dropout2d(0.3)
+        self.dropout = nn.Dropout2d(0.5)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=4, dilation=4)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.relu2 = nn.LeakyReLU()
@@ -71,12 +71,10 @@ class BasicBlock(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu1 = nn.LeakyReLU()
-        self.dropout = nn.Dropout2d(0.4)
+        self.dropout = nn.Dropout2d(0.5)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channels)
-        self.dropout2 = nn.Dropout2d(0.4)
         self.relu2 = nn.LeakyReLU()
-
 
         # Residual connection - hanya jika channel berbeda
         self.shortcut = nn.Sequential()
@@ -95,7 +93,6 @@ class BasicBlock(nn.Module):
         out = self.dropout(out)
         out = self.conv2(out)
         out = self.bn2(out)
-        out = self.dropout2(out)
 
         # Add residual connection
         out = out + residual
@@ -105,12 +102,12 @@ class BasicBlock(nn.Module):
 
 # ===== Decoder Block =====
 class Dec_Block(nn.Module):
-    def __init__(self, in_channels, skip_channels, out_channels):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
         self.upconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
         self.relu = nn.LeakyReLU()
         self.bn = nn.BatchNorm2d(out_channels)
-        self.conv = BasicBlock(out_channels + skip_channels, out_channels)
+        self.conv = BasicBlock(in_channels // 2 + out_channels, out_channels)
 
     def forward(self, x, skip):
         x = self.upconv(x)
@@ -132,15 +129,15 @@ class MergeLayer(nn.Module):
 
 # ===== Final Model =====
 class Build_UNet(nn.Module):
-    def __init__(self, num_classes=3):  # Ganti sesuai jumlah kelas
+    def __init__(self, num_classes=1):  # Ganti sesuai jumlah kelas
         super().__init__()
         self.encoder = Encoder()
         self.mc1 = MiddleConv(512, 1024)
-        self.mc2 = MiddleConv(1024, 512)
-        self.decoder1 = Dec_Block(in_channels=512, skip_channels=512, out_channels=512)
-        self.decoder2 = Dec_Block(512, 256, 256)
-        self.decoder3 = Dec_Block(256, 128, 128)
-        self.decoder4 = Dec_Block(128, 64, 64)
+        self.mc2 = MiddleConv(1024, 1024)
+        self.decoder1 = Dec_Block(1024, 512)
+        self.decoder2 = Dec_Block(512, 256)
+        self.decoder3 = Dec_Block(256, 128)
+        self.decoder4 = Dec_Block(128, 64)
         self.merge = MergeLayer()
         self.segmentation = nn.Conv2d(67, num_classes, kernel_size=1)
 
@@ -157,7 +154,7 @@ class Build_UNet(nn.Module):
         return out
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = Build_UNet(num_classes=3).to(device)
+model = Build_UNet(num_classes=1).to(device)
 summary(model, (3, 256, 256))
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Total parameters: {total_params:,}")

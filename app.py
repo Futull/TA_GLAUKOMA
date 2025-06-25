@@ -1,8 +1,15 @@
 import streamlit as st
 from PIL import Image
 import os
+from skimage.measure import label, regionprops
+from skimage.morphology import disk, opening, closing
+from skimage.filters import gaussian
 import cv2
 import numpy as np
+import torch
+from torchvision import transforms
+import matplotlib.pyplot as plt
+from scipy import ndimage
 
 # ===================== COVER PAGE ===================== #
 
@@ -33,7 +40,6 @@ def Cover():
         "- Go to **Segmentation** to choose between OD/OC or Vessel\n"
         "- Go to **Feature Extraction** to analyze CDR, vessel tortuosity, etc.\n"
         "- Use **Classification** to predict glaucoma severity\n"
-        "- Visit **About Glaucoma** to learn more"
     )
 
 # ===================== ABOUT PAGE ===================== #
@@ -58,147 +64,441 @@ def About():
     - Vascular narrowing
     """)
 
-# ===================== PREPROCESSING PAGE ===================== #
+# ===================== PREPROCESSING FUNCTIONS ===================== #
+# ===================== PREPOS OD/OC FUNCTIONS ===================== #
+def crop_optic_disc_improved(image, crop_factor=1.0):
+    """
+    Crop around the ONH with proper margins using grayscale and thresholding method.
+    Output is in RGB format for Streamlit visualization.
+    """
+    try:
+        # Convert the image to grayscale (instead of LAB)
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        
+        # Apply Gaussian Blur to reduce noise
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Apply thresholding to extract the optic disc
+        _, binary_image = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
+        
+        # Convert binary image to RGB (3 channels)
+        binary_rgb_image = cv2.cvtColor(binary_image, cv2.COLOR_GRAY2RGB)
+        
+        # Find contours
+        contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if contours:
+            # Select the largest contour
+            optic_disc_contour = max(contours, key=cv2.contourArea)
+            
+            # Create a mask for the optic disc
+            mask = np.zeros_like(gray)
+            cv2.drawContours(mask, [optic_disc_contour], -1, (255, 255, 255), thickness=cv2.FILLED)
+            
+            # Apply the mask to extract the optic disc region
+            optic_disc = cv2.bitwise_and(image, image, mask=mask)
+            
+            # Calculate the bounding rectangle for the optic disc contour
+            x, y, w, h = cv2.boundingRect(optic_disc_contour)
+            
+            # Calculate the center of the bounding rectangle
+            center_x = x + w // 2
+            center_y = y + h // 2
+            
+            # Calculate the radius of the bounding rectangle
+            radius = max(w // 2, h // 2)
+        else:
+            # Fallback if no contour found
+            center_x, center_y = image.shape[1] // 2, image.shape[0] // 2
+            radius = min(image.shape[:2]) // 10
+        
+        # Calculate crop with margins
+        crop_radius = int(radius * crop_factor)
+        
+        # Ensure bounds are within image size
+        x_start = max(0, center_x - crop_radius)
+        y_start = max(0, center_y - crop_radius)
+        x_end = min(image.shape[1], center_x + crop_radius)
+        y_end = min(image.shape[0], center_y + crop_radius)
+        
+        # Crop the image
+        cropped_image = image[y_start:y_end, x_start:x_end]
+        
+        # Make it square if needed
+        h, w = cropped_image.shape[:2]
+        if h != w:
+            size = min(h, w)
+            start_h = (h - size) // 2
+            start_w = (w - size) // 2
+            cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
+        
+        # Return the cropped image and details in RGB format
+        return cropped_image, (center_x, center_y, radius), binary_rgb_image
+    
+    except Exception as e:
+        st.warning(f"ONH detection failed: {e}. Using fallback method.")
+        
+        # Fallback method
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
+        
+        center_x, center_y = max_loc
+        radius = min(image.shape[:2]) // 10
+        crop_radius = int(radius * crop_factor)
+        
+        x_start = max(0, center_x - crop_radius)
+        y_start = max(0, center_y - crop_radius)
+        x_end = min(image.shape[1], center_x + crop_radius)
+        y_end = min(image.shape[0], center_y + crop_radius)
+        
+        cropped_image = image[y_start:y_end, x_start:x_end]
+        
+        # Make it square
+        h, w = cropped_image.shape[:2]
+        if h != w:
+            size = min(h, w)
+            start_h = (h - size) // 2
+            start_w = (w - size) // 2
+            cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
+        
+        # Convert to RGB (even fallback images will be in RGB format)
+        binary_rgb_image = cv2.cvtColor(binary_image, cv2.COLOR_GRAY2RGB)
+        
+        return cropped_image, (center_x, center_y, radius), binary_rgb_image
 
-def color_normalization(image, avg_r, avg_g, avg_b):
-    img_float = image.astype(np.float32) / 255.0
-    mean_r = np.mean(img_float[:, :, 0])
-    if mean_r == 0:
-        mean_r = 1e-6
-    R_norm = (img_float[:, :, 0] / mean_r) * avg_r
-    G_norm = (img_float[:, :, 1] / mean_r) * avg_g
-    B_norm = (img_float[:, :, 2] / mean_r) * avg_b
-    normalized_img = np.stack([
-        np.clip(R_norm, 0, 1),
-        np.clip(G_norm, 0, 1),
-        np.clip(B_norm, 0, 1)], axis=2) * 255
-    return normalized_img.astype(np.uint8)
+
+def resize_image(image, target_size=(256, 256)):
+    """Resize image to target size"""
+    return cv2.resize(image, target_size, interpolation=cv2.INTER_LINEAR)
+
+def unsharp_mask(image, blur_ksize=5, strength=1.0):
+    """Apply unsharp masking for sharpening"""
+    blur = cv2.GaussianBlur(image, (blur_ksize, blur_ksize), 0)
+    mask = cv2.addWeighted(image, 1 + strength, blur, -strength, 0)
+    return np.clip(mask, 0, 255).astype(np.uint8)
+
+def high_pass_filter(image):
+    """Apply high-pass filter for additional sharpening"""
+    low_pass = cv2.GaussianBlur(image, (9, 9), 0)
+    high_pass = cv2.subtract(image, low_pass)
+    sharpened = cv2.add(image, high_pass)
+    return np.clip(sharpened, 0, 255).astype(np.uint8)
+
+def combined_sharpening(image):
+    """Combine unsharp masking and high-pass filtering"""
+    unsharp = unsharp_mask(image, blur_ksize=5, strength=1.5)
+    highpass = high_pass_filter(unsharp)
+    return highpass
+
+def color_normalization_fixed(image, avg_r=0.9601, avg_g=0.6374, avg_b=0.3408):
+    """Apply per-channel color normalization"""
+    img = image.astype(np.float32) / 255.0
+    
+    mean_r = np.mean(img[:, :, 0])
+    mean_g = np.mean(img[:, :, 1])
+    mean_b = np.mean(img[:, :, 2])
+    
+    img[:, :, 0] *= (avg_r / (mean_r + 1e-6))
+    img[:, :, 1] *= (avg_g / (mean_g + 1e-6))
+    img[:, :, 2] *= (avg_b / (mean_b + 1e-6))
+    
+    img = np.clip(img, 0, 1)
+    return (img * 255).astype(np.uint8)
 
 def apply_gamma_correction(image, gamma=1.1):
+    """Apply gamma correction"""
     normalized = image / 255.0
     corrected = np.power(normalized, 1.0 / gamma)
     return np.clip(corrected * 255.0, 0, 255).astype(np.uint8)
 
-def apply_clahe_rgb(image, clip_limit=2.0, tile_grid_size=(12, 12)):
-    lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
-    l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
-    cl = clahe.apply(l)
-    merged = cv2.merge((cl, a, b))
-    return cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
+def apply_clahe(image, clip_limit=2.0, tile_grid_size=(12, 12)):
+    """Apply CLAHE"""
+    if len(image.shape) == 3:
+        lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+        cl = clahe.apply(l)
+        merged = cv2.merge((cl, a, b))
+        return cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
+    else:
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+        return clahe.apply(image)
 
 def apply_median_filter(image, ksize=3):
-    channels = cv2.split(image)
-    filtered_channels = [cv2.medianBlur(ch, ksize) for ch in channels]
-    return cv2.merge(filtered_channels)
+    """Apply median filter for noise reduction"""
+    return cv2.medianBlur(image, ksize)
     
+# ===================== PIPELINE PREPOS OD/OC STEPS ===================== #
+def preprocess_od_oc_stepwise(image):
+    """
+    Apply step-by-step preprocessing for OD/OC segmentation
+    Returns a dictionary with all intermediate results
+    """
+    results = {}
+    
+    # Step 1: Crop ONH region
+    try:
+        cropped_image, detection_info, binary_rgb_image = crop_optic_disc_improved(image, crop_factor=1.0)
+        
+        # Menyimpan hasil pemotongan, informasi deteksi, dan mask biner RGB
+        results['step1_cropped'] = cropped_image
+        results['detection_info'] = detection_info
+        results['binary_rgb_mask'] = binary_rgb_image
+        
+    except Exception as e:
+        st.error(f"Error in Step 1 (ONH Cropping): {e}")
+        return None
+    
+    # Step 2: Resize to 256x256
+    resized_image = resize_image(cropped_image, target_size=(256, 256))
+    results['step2_resized'] = resized_image
+    
+    # Step 3: Sharpening
+    sharpened_image = combined_sharpening(resized_image)
+    results['step3_sharpened'] = sharpened_image
+    
+    # Step 4: Color Normalization
+    color_normalized_image = color_normalization_fixed(sharpened_image)
+    results['step4_color_norm'] = color_normalized_image
+    
+    # Step 5: Gamma Correction
+    gamma_corrected_image = apply_gamma_correction(color_normalized_image, gamma=1.1)
+    results['step5_gamma'] = gamma_corrected_image
+    
+    # Step 6: CLAHE
+    clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(12, 12))
+    results['step6_clahe'] = clahe_image
+    
+    # Step 7: Median Filter
+    final_image = apply_median_filter(clahe_image, ksize=3)
+    results['step7_final'] = final_image
+    
+    return results
+
+# ===================== PIPELINE PREPOS VESSEL STEPS ===================== #
+def preprocess_vessel_stepwise(image):
+    """
+    Apply step-by-step preprocessing for vessel segmentation
+    Returns a dictionary with all intermediate results
+    """
+    results = {}
+    
+    # Step 1: Resize to 256x256
+    resized_image = resize_image(image, target_size=(256, 256))
+    results['step1_resized'] = resized_image
+    
+    # Step 2: Green channel extraction
+    if len(resized_image.shape) == 3:
+        green_channel = resized_image[:, :, 1]
+    else:
+        green_channel = resized_image
+    
+    # Convert to 3-channel for display
+    green_3ch = cv2.cvtColor(green_channel, cv2.COLOR_GRAY2RGB)
+    results['step2_green'] = green_3ch
+    
+    # Step 3: Gamma correction
+    gamma_corrected_image = apply_gamma_correction(green_3ch, gamma=1.1)
+    results['step3_gamma'] = gamma_corrected_image
+    
+    # Step 4: CLAHE enhancement
+    clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(8, 8))
+    results['step4_clahe'] = clahe_image
+    
+    # Step 5: Median filter
+    final_image = apply_median_filter(clahe_image, ksize=3)
+    results['step5_final'] = final_image
+    
+    return results
+
+# ===================== PREPROCESSING PAGE ===================== #
+
 def Preprocessing():
     st.title("Preprocessing Steps")
-
+    
     uploaded_file = st.file_uploader("Upload Fundus Image", type=["png", "jpg", "jpeg"])
     
     if uploaded_file:
         image = Image.open(uploaded_file).convert('RGB')
         img_np = np.array(image)
-        st.image(img_np, caption="🟠 Original Image", use_container_width=True)
-
-        step = st.radio("Select preprocessing step:", [
-            "Resize Image",
-            "Color Normalization",
-            "Gamma Correction",
-            "CLAHE",
-            "Median Filter"
-        ])
-
-        # Step 1: Resize
-        resized = cv2.resize(img_np, (256, 256), interpolation=cv2.INTER_LINEAR)
-        st.image(resized, caption="🔵 Resized 256x256")
-
-        if step == "Resize Image":
-            st.success("Preprocessing complete.")
-            return
-
-        # Step 2: Color Normalization
-        avg_r, avg_g, avg_b = 0.5543, 0.3411, 0.1512
-        color_norm = color_normalization(resized, avg_r, avg_g, avg_b)
-        st.image(color_norm, caption="🟢 Color Normalization")
-
-        if step == "Color Normalization":
-            st.success("Preprocessing complete.")
-            return
-
-        # Step 3: Gamma Correction
-        gamma_img = apply_gamma_correction(color_norm, gamma=1.1)
-        st.image(gamma_img, caption="🔴 Gamma Correction 1.1")
-
-        if step == "Gamma Correction":
-            st.success("Preprocessing complete.")
-            return
-
-        # Step 4: CLAHE
-        clahe_img = apply_clahe_rgb(gamma_img, clip_limit=2.0, tile_grid_size=(12, 12))
-        st.image(clahe_img, caption="🟡 CLAHE clip limit 2.0 & tile grid 12x12")
-
-        if step == "CLAHE":
-            st.success("Preprocessing complete.")
-            return
-
-        # Step 5: Median Filter
-        median_img = apply_median_filter(clahe_img, ksize=3)
-        st.image(median_img, caption="🟣 Median Filter kernel 3x3")
-
-        st.success("Preprocessing complete.")
-
-# ===================== OTHER PAGES ===================== #
-
+        
+        st.subheader("Original Image")
+        st.image(img_np, caption="Original Fundus Image", use_container_width=True)
+        
+        task = st.radio("Select Preprocessing Task", ["OD/OC Segmentation", "Vessel Segmentation"])
+        
+        if task == "OD/OC Segmentation":
+            if st.button("Apply OD/OC Preprocessing"):
+                with st.spinner("Processing..."):
+                    results = preprocess_od_oc_stepwise(img_np)
+                    
+                    if results:
+                        st.session_state['preprocessing_results'] = results
+                        st.session_state['preprocessed_image'] = results['step7_final']
+                        
+                        # Display all steps in order
+                        st.subheader("Preprocessing Pipeline Results")
+                        
+                        # Show 8 steps in 4 columns x 2 rows
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.image(img_np, caption="Original")
+                        
+                        with col2:
+                            st.image(results['step1_cropped'], caption="1.ONH Crop")
+                        
+                        with col3:
+                            st.image(results['step2_resized'], caption="2.Resized 256 x 256")
+                        
+                        with col4:
+                            st.image(results['step3_sharpened'], caption="3.Sharpening")
+                        
+                        # Second row
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.image(results['step4_color_norm'], caption="4.RGB Color Normalization")
+                        
+                        with col2:
+                            st.image(results['step5_gamma'], caption="5.Gamma Correct")
+                        
+                        with col3:
+                            st.image(results['step6_clahe'], caption="6.CLAHE")
+                        
+                        with col4:
+                            st.image(results['step7_final'], caption="7.Median Filter")
+                        
+                        st.success("✅ OD/OC preprocessing completed!")
+                        
+                        # Show detection info
+                        center_x, center_y, radius = results['detection_info']
+                        st.info(f"ONH detected at center ({center_x}, {center_y}) with radius {radius} pixels")
+                        
+        elif task == "Vessel Segmentation":
+            if st.button("Apply Vessel Preprocessing"):
+                with st.spinner("Processing vessel segmentation..."):
+                    results = preprocess_vessel_stepwise(img_np)
+                    
+                    st.session_state['vessel_preprocessed'] = results['step5_final']
+                    st.session_state['vessel_results'] = results
+                    
+                    # Display all steps in order
+                    st.subheader("Vessel Preprocessing Pipeline Results")
+                    
+                    # Show 6 steps in 3 columns x 2 rows
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.image(img_np, caption="Original Image")
+                    
+                    with col2:
+                        st.image(results['step1_resized'], caption="1.Resized 256 x 256")
+                    
+                    with col3:
+                        st.image(results['step2_green'], caption="2.Green Channel")
+                    
+                    # Second row
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.image(results['step3_gamma'], caption="3.Gamma Correct")
+                    
+                    with col2:
+                        st.image(results['step4_clahe'], caption="4.CLAHE")
+                    
+                    with col3:
+                        st.image(results['step5_final'], caption="5.Median Filter")
+                    
+                    st.success("✅ Vessel preprocessing completed!")
+        
+    else:
+        st.warning("⚠️ Please upload an image to begin preprocessing.")
+# ===================== SEGMENTATION ===================== #
 def Segmentation():
     st.title("Segmentation")
-    seg_type = st.selectbox("Segmentation Type", ["Optic Disc & Cup", "Blood Vessel"])
-    if seg_type == "Optic Disc & Cup":
-        st.markdown("Running OD/OC segmentation model...")
-    elif seg_type == "Blood Vessel":
-        st.markdown("Running vessel segmentation model...")
+    
+    if 'preprocessed_image' not in st.session_state and 'vessel_preprocessed' not in st.session_state:
+        st.warning("⚠️ Please complete preprocessing first.")
+        return
+    
+    seg_type = st.radio("Select segmentation type:", ["Optic Disc & Cup", "Blood Vessel"])
+    
+    if st.button("🔁 Load Model & Run Segmentation"):
+        st.info("🔄 Loading model and running segmentation...")
+        st.warning("⚠️ Model loading functionality needs to be implemented.")
+        
+        with st.spinner("Processing..."):
+            if seg_type == "Optic Disc & Cup":
+                if 'preprocessed_image' in st.session_state:
+                    image = st.session_state['preprocessed_image']
+                    st.image(image, caption="Preprocessed for OD/OC Segmentation")
+                    
+            elif seg_type == "Blood Vessel":
+                if 'vessel_preprocessed' in st.session_state:
+                    image = st.session_state['vessel_preprocessed']
+                    st.image(image, caption="Preprocessed for Vessel Segmentation")
+        
+        st.success("✅ Segmentation completed.")
+
+# ===================== OTHER PAGES ===================== #
 
 def FeatureExtraction():
     st.title("Feature Extraction")
     feat_type = st.selectbox("Feature Source", ["OD/OC Segmentation", "Vessel Segmentation"])
+    
     if feat_type == "OD/OC Segmentation":
-        st.markdown("Extracting CDR, disc/cup area, eccentricity, solidity, etc.")
+        pass
+        
     elif feat_type == "Vessel Segmentation":
-        st.markdown("Extracting vessel features: tortuosity, skeleton length, bifurcation points, etc.")
+        pass
 
 def Classification():
     st.title("Glaucoma Classification")
-    st.markdown("Use the trained CNN model to classify the image into one of the glaucoma severity levels.")
-
-def Evaluation():
-    st.title("Model Evaluation")
-    st.markdown("Display confusion matrix, accuracy, sensitivity, specificity, and other metrics.")
+    st.markdown("""
+    **Classification Pipeline:**
+    1. Load extracted features
+    2. Apply trained CNN model
+    3. Predict glaucoma severity level
+    
+    **Severity Levels:**
+    - 🟢 Normal
+    - 🟡 Mild Glaucoma
+    - 🟠 Moderate Glaucoma
+    - 🔴 Severe Glaucoma
+    """)
 
 # ===================== PAGE ROUTING ===================== #
 
-st.sidebar.title("Navigation")
-page = st.sidebar.selectbox("Go to Page", [
-    "Cover", 
-    "About Glaucoma", 
-    "Preprocessing", 
-    "Segmentation", 
-    "Feature Extraction", 
-    "Classification", 
-    "Evaluation"
-])
+def main():
+    st.set_page_config(
+        page_title="Glaucoma Detection System",
+        page_icon="👁️",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    st.sidebar.title("👁️ Navigation")
+    page = st.sidebar.selectbox("Go to Page", [
+        "Cover",  
+        "1.Preprocessing", 
+        "2.Segmentation", 
+        "3.Feature Extraction", 
+        "4.Classification", 
+    ])
+    
+    # Route to appropriate page
+    if page == "Cover":
+        Cover()
+    elif page == "1.Preprocessing":
+        Preprocessing()
+    elif page == "2.Segmentation":
+        Segmentation()
+    elif page == "3.Feature Extraction":
+        FeatureExtraction()
+    elif page == "4.Classification":
+        Classification()
 
-if page == "Cover":
-    Cover()
-elif page == "About Glaucoma":
-    About()
-elif page == "Preprocessing":
-    Preprocessing()
-elif page == "Segmentation":
-    Segmentation()
-elif page == "Feature Extraction":
-    FeatureExtraction()
-elif page == "Classification":
-    Classification()
-elif page == "Evaluation":
-    Evaluation()
+if __name__ == "__main__":
+    main()
