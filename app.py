@@ -26,7 +26,7 @@ def Cover():
     st.write("**Dosen Pembimbing 1:** Prof. Dr. Tri Arief Sardjono, S.T., M.T")
     st.write("**Dosen Pembimbing 2:** Nada Fitrieyatul Hikmah, S.T., M.T")
 
-     st.sidebar.info(
+    st.sidebar.info(
         "Navigation Instructions:\n"
         "- Go to **Preprocessing** to enhance image quality\n"
         "- Go to **Segmentation** to choose between OD/OC or Vessel\n"
