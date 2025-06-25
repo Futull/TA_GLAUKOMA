@@ -249,15 +249,15 @@ def preprocess_od_oc_stepwise(image):
     
     # Step 5: Gamma Correction
     gamma_corrected_image = apply_gamma_correction(color_normalized_image, gamma=1.1)
-    results['step5_GAMMA'] = gamma_corrected_image
+    results['step5_gamma'] = gamma_corrected_image
     
     # Step 6: CLAHE
     clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(12, 12))
-    results['step6_CLAHE'] = clahe_image
+    results['step6_clahe'] = clahe_image
     
     # Step 7: Median Filter
     final_image = apply_median_filter(clahe_image, ksize=3)
-    results['step7_Median Filter'] = final_image
+    results['step7_final'] = final_image
     
     return results
 
