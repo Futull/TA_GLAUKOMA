@@ -40,30 +40,7 @@ def Cover():
         "- Go to *Segmentation* to choose between OD/OC or Vessel\n"
         "- Go to *Feature Extraction* to analyze CDR, vessel tortuosity, etc.\n"
         "- Use *Classification* to predict glaucoma severity\n"
-        "- Visit *About Glaucoma* to learn more"
     )
-
-# ===================== ABOUT PAGE ===================== #
-
-def About():
-    st.title("About Glaucoma")
-    st.markdown("""
-    Glaucoma is a disease that damages the optic nerve due to high intraocular pressure.  
-    It can lead to permanent blindness if untreated.
-
-    *Severity Stages*:
-    - Normal
-    - Mild
-    - Moderate
-    - Severe
-
-    *Key Morphological Indicators*:
-    - Cup-to-Disc Ratio (CDR)
-    - Optic disc deformation
-    - Vessel tortuosity
-    - Bifurcation patterns
-    - Vascular narrowing
-    """)
 
 # ===================== PREPROCESSING FUNCTIONS ===================== #
 # ===================== PREPOS OD/OC FUNCTIONS ===================== #
@@ -486,20 +463,6 @@ def Classification():
     - 🔴 Severe Glaucoma
     """)
 
-def Evaluation():
-    st.title("Model Evaluation")
-    st.markdown("""
-    *Evaluation Metrics:*
-    - Confusion Matrix
-    - Accuracy
-    - Sensitivity (Recall)
-    - Specificity
-    - Precision
-    - F1-Score
-    - ROC Curve
-    - AUC Score
-    """)
-
 # ===================== PAGE ROUTING ===================== #
 
 def main():
@@ -518,14 +481,11 @@ def main():
         "Segmentation", 
         "Feature Extraction", 
         "Classification", 
-        "Evaluation"
     ])
     
     # Route to appropriate page
     if page == "Cover":
         Cover()
-    elif page == "About Glaucoma":
-        About()
     elif page == "Preprocessing":
         Preprocessing()
     elif page == "Segmentation":
@@ -534,8 +494,6 @@ def main():
         FeatureExtraction()
     elif page == "Classification":
         Classification()
-    elif page == "Evaluation":
-        Evaluation()
 
 if __name__ == "__main__":
     main()
