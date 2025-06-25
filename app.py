@@ -476,7 +476,6 @@ def main():
     st.sidebar.title("👁 Navigation")
     page = st.sidebar.selectbox("Go to Page", [
         "Cover", 
-        "About Glaucoma", 
         "Preprocessing", 
         "Segmentation", 
         "Feature Extraction", 
