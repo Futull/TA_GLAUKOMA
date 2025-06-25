@@ -66,8 +66,8 @@ def About():
     """)
 
 # ===================== PREPROCESSING FUNCTIONS ===================== #
-
-def crop_optic_disc_improved(image, crop_factor=1.2):
+# ===================== PREPOS OD/OC FUNCTIONS ===================== #
+def crop_optic_disc_improved(image, crop_factor=1.5):
     """
     Crop around the ONH with proper margins
     """
@@ -218,7 +218,8 @@ def apply_clahe(image, clip_limit=2.0, tile_grid_size=(12, 12)):
 def apply_median_filter(image, ksize=3):
     """Apply median filter for noise reduction"""
     return cv2.medianBlur(image, ksize)
-
+    
+# ===================== PIPELINE PREPOS OD/OC STEPS ===================== #
 def preprocess_od_oc_stepwise(image):
     """
     Apply step-by-step preprocessing for OD/OC segmentation
@@ -228,7 +229,7 @@ def preprocess_od_oc_stepwise(image):
     
     # Step 1: Crop ONH region
     try:
-        cropped_image, detection_info = crop_optic_disc_improved(image, crop_factor=1.2)
+        cropped_image, detection_info = crop_optic_disc_improved(image, crop_factor=1.5)
         results['step1_cropped'] = cropped_image
         results['detection_info'] = detection_info
     except Exception as e:
