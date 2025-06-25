@@ -610,32 +610,9 @@ def FeatureExtraction():
 
 def Classification():
     st.title("Glaucoma Classification")
-    st.markdown("""
-    **Classification Pipeline:**
-    1. Load extracted features
-    2. Apply trained CNN model
-    3. Predict glaucoma severity level
-    
-    **Severity Levels:**
-    - 🟢 Normal
-    - 🟡 Mild Glaucoma
-    - 🟠 Moderate Glaucoma
-    - 🔴 Severe Glaucoma
-    """)
 
 def Evaluation():
     st.title("Model Evaluation")
-    st.markdown("""
-    **Evaluation Metrics:**
-    - Confusion Matrix
-    - Accuracy
-    - Sensitivity (Recall)
-    - Specificity
-    - Precision
-    - F1-Score
-    - ROC Curve
-    - AUC Score
-    """)
 
 # ===================== PAGE ROUTING ===================== #
 
