@@ -47,107 +47,6 @@ def Cover():
 
 # ===================== PREPROCESSING FUNCTIONS ===================== #
 # ===================== PREPOS OD/OC FUNCTIONS ===================== #
-def crop_optic_disc_improved(image, crop_factor=1.0):
-    """
-    Crop around the ONH with proper margins using grayscale and thresholding method.
-    Output is in RGB format for Streamlit visualization.
-    """
-    try:
-        # Convert the image to grayscale (instead of LAB)
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        
-        # Apply Gaussian Blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        
-        # Apply thresholding to extract the optic disc
-        _, binary_image = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
-        
-        # Convert binary image to RGB (3 channels)
-        binary_rgb_image = cv2.cvtColor(binary_image, cv2.COLOR_GRAY2RGB)
-        
-        # Find contours
-        contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if contours:
-            # Select the largest contour
-            optic_disc_contour = max(contours, key=cv2.contourArea)
-            
-            # Create a mask for the optic disc
-            mask = np.zeros_like(gray)
-            cv2.drawContours(mask, [optic_disc_contour], -1, (255, 255, 255), thickness=cv2.FILLED)
-            
-            # Apply the mask to extract the optic disc region
-            optic_disc = cv2.bitwise_and(image, image, mask=mask)
-            
-            # Calculate the bounding rectangle for the optic disc contour
-            x, y, w, h = cv2.boundingRect(optic_disc_contour)
-            
-            # Calculate the center of the bounding rectangle
-            center_x = x + w // 2
-            center_y = y + h // 2
-            
-            # Calculate the radius of the bounding rectangle
-            radius = max(w // 2, h // 2)
-        else:
-            # Fallback if no contour found
-            center_x, center_y = image.shape[1] // 2, image.shape[0] // 2
-            radius = min(image.shape[:2]) // 10
-        
-        # Calculate crop with margins
-        crop_radius = int(radius * crop_factor)
-        
-        # Ensure bounds are within image size
-        x_start = max(0, center_x - crop_radius)
-        y_start = max(0, center_y - crop_radius)
-        x_end = min(image.shape[1], center_x + crop_radius)
-        y_end = min(image.shape[0], center_y + crop_radius)
-        
-        # Crop the image
-        cropped_image = image[y_start:y_end, x_start:x_end]
-        
-        # Make it square if needed
-        h, w = cropped_image.shape[:2]
-        if h != w:
-            size = min(h, w)
-            start_h = (h - size) // 2
-            start_w = (w - size) // 2
-            cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
-        
-        # Return the cropped image and details in RGB format
-        return cropped_image, (center_x, center_y, radius), binary_rgb_image
-    
-    except Exception as e:
-        st.warning(f"ONH detection failed: {e}. Using fallback method.")
-        
-        # Fallback method
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
-        
-        center_x, center_y = max_loc
-        radius = min(image.shape[:2]) // 10
-        crop_radius = int(radius * crop_factor)
-        
-        x_start = max(0, center_x - crop_radius)
-        y_start = max(0, center_y - crop_radius)
-        x_end = min(image.shape[1], center_x + crop_radius)
-        y_end = min(image.shape[0], center_y + crop_radius)
-        
-        cropped_image = image[y_start:y_end, x_start:x_end]
-        
-        # Make it square
-        h, w = cropped_image.shape[:2]
-        if h != w:
-            size = min(h, w)
-            start_h = (h - size) // 2
-            start_w = (w - size) // 2
-            cropped_image = cropped_image[start_h:start_h+size, start_w:start_w+size]
-        
-        # Convert to RGB (even fallback images will be in RGB format)
-        binary_rgb_image = cv2.cvtColor(binary_image, cv2.COLOR_GRAY2RGB)
-        
-        return cropped_image, (center_x, center_y, radius), binary_rgb_image
-
 
 def resize_image(image, target_size=(256, 256)):
     """Resize image to target size"""
@@ -218,42 +117,29 @@ def preprocess_od_oc_stepwise(image):
     """
     results = {}
     
-    # Step 1: Crop ONH region
-    try:
-        cropped_image, detection_info, binary_rgb_image = crop_optic_disc_improved(image, crop_factor=1.0)
-        
-        # Menyimpan hasil pemotongan, informasi deteksi, dan mask biner RGB
-        results['step1_cropped'] = cropped_image
-        results['detection_info'] = detection_info
-        results['binary_rgb_mask'] = binary_rgb_image
-        
-    except Exception as e:
-        st.error(f"Error in Step 1 (ONH Cropping): {e}")
-        return None
+    # Step 1: Resize to 256x256
+    resized_image = resize_image(image, target_size=(256, 256))
+    results['step1_resized'] = resized_image
     
-    # Step 2: Resize to 256x256
-    resized_image = resize_image(cropped_image, target_size=(256, 256))
-    results['step2_resized'] = resized_image
-    
-    # Step 3: Sharpening
+    # Step 2: Sharpening
     sharpened_image = combined_sharpening(resized_image)
-    results['step3_sharpened'] = sharpened_image
+    results['step2_sharpened'] = sharpened_image
     
-    # Step 4: Color Normalization
+    # Step 3: Color Normalization
     color_normalized_image = color_normalization_fixed(sharpened_image)
-    results['step4_color_norm'] = color_normalized_image
+    results['step3_color_norm'] = color_normalized_image
     
-    # Step 5: Gamma Correction
+    # Step 4: Gamma Correction
     gamma_corrected_image = apply_gamma_correction(color_normalized_image, gamma=1.1)
-    results['step5_gamma'] = gamma_corrected_image
+    results['step4_gamma'] = gamma_corrected_image
     
-    # Step 6: CLAHE
+    # Step 5: CLAHE
     clahe_image = apply_clahe(gamma_corrected_image, clip_limit=2.0, tile_grid_size=(12, 12))
-    results['step6_clahe'] = clahe_image
+    results['step5_clahe'] = clahe_image
     
-    # Step 7: Median Filter
+    # Step 6: Median Filter
     final_image = apply_median_filter(clahe_image, ksize=3)
-    results['step7_final'] = final_image
+    results['step6_final'] = final_image
     
     return results
 
@@ -298,69 +184,74 @@ def preprocess_vessel_stepwise(image):
 def Preprocessing():
     st.title("Preprocessing Steps")
     
-    uploaded_file = st.file_uploader("Upload Fundus Image", type=["png", "jpg", "jpeg"])
+    task = st.radio("Select Preprocessing Task", ["OD/OC Segmentation", "Vessel Segmentation"])
     
-    if uploaded_file:
-        image = Image.open(uploaded_file).convert('RGB')
-        img_np = np.array(image)
+    if task == "OD/OC Segmentation":
+        st.subheader("OD/OC Segmentation Preprocessing")
+        uploaded_file_od = st.file_uploader("Upload Cropped ONH Image for OD/OC", type=["png", "jpg", "jpeg"], key="od_oc_upload")
         
-        st.subheader("Original Image")
-        st.image(img_np, caption="Original Fundus Image", use_container_width=True)
-        
-        task = st.radio("Select Preprocessing Task", ["OD/OC Segmentation", "Vessel Segmentation"])
-        
-        if task == "OD/OC Segmentation":
+        if uploaded_file_od:
+            image_od = Image.open(uploaded_file_od).convert('RGB')
+            img_np_od = np.array(image_od)
+            
+            st.subheader("Original Cropped Image")
+            st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
+            
             if st.button("Apply OD/OC Preprocessing"):
                 with st.spinner("Processing..."):
-                    results = preprocess_od_oc_stepwise(img_np)
+                    results = preprocess_od_oc_stepwise(img_np_od)
                     
-                    if results:
-                        st.session_state['preprocessing_results'] = results
-                        st.session_state['preprocessed_image'] = results['step7_final']
-                        
-                        # Display all steps in order
-                        st.subheader("Preprocessing Pipeline Results")
-                        
-                        # Show 8 steps in 4 columns x 2 rows
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            st.image(img_np, caption="Original")
-                        
-                        with col2:
-                            st.image(results['step1_cropped'], caption="1.ONH Crop")
-                        
-                        with col3:
-                            st.image(results['step2_resized'], caption="2.Resized 256 x 256")
-                        
-                        with col4:
-                            st.image(results['step3_sharpened'], caption="3.Sharpening")
-                        
-                        # Second row
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            st.image(results['step4_color_norm'], caption="4.RGB Color Normalization")
-                        
-                        with col2:
-                            st.image(results['step5_gamma'], caption="5.Gamma Correct")
-                        
-                        with col3:
-                            st.image(results['step6_clahe'], caption="6.CLAHE")
-                        
-                        with col4:
-                            st.image(results['step7_final'], caption="7.Median Filter")
-                        
-                        st.success("✅ OD/OC preprocessing completed!")
-                        
-                        # Show detection info
-                        center_x, center_y, radius = results['detection_info']
-                        st.info(f"ONH detected at center ({center_x}, {center_y}) with radius {radius} pixels")
-                        
-        elif task == "Vessel Segmentation":
+                    st.session_state['preprocessing_results'] = results
+                    st.session_state['preprocessed_image'] = results['step6_final']
+                    
+                    # Display all steps in order
+                    st.subheader("OD/OC Preprocessing Pipeline Results")
+                    
+                    # Show 7 steps in columns
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.image(img_np_od, caption="Original Cropped")
+                    
+                    with col2:
+                        st.image(results['step1_resized'], caption="1.Resized 256 x 256")
+                    
+                    with col3:
+                        st.image(results['step2_sharpened'], caption="2.Sharpening")
+                    
+                    with col4:
+                        st.image(results['step3_color_norm'], caption="3.RGB Color Normalization")
+                    
+                    # Second row
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.image(results['step4_gamma'], caption="4.Gamma Correct")
+                    
+                    with col2:
+                        st.image(results['step5_clahe'], caption="5.CLAHE")
+                    
+                    with col3:
+                        st.image(results['step6_final'], caption="6.Median Filter")
+                    
+                    st.success("✅ OD/OC preprocessing completed!")
+        else:
+            st.warning("⚠ Please upload a cropped ONH image for OD/OC preprocessing.")
+            
+    elif task == "Vessel Segmentation":
+        st.subheader("Vessel Segmentation Preprocessing")
+        uploaded_file_vessel = st.file_uploader("Upload Full Fundus Image for Vessel", type=["png", "jpg", "jpeg"], key="vessel_upload")
+        
+        if uploaded_file_vessel:
+            image_vessel = Image.open(uploaded_file_vessel).convert('RGB')
+            img_np_vessel = np.array(image_vessel)
+            
+            st.subheader("Original Full Image")
+            st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
+            
             if st.button("Apply Vessel Preprocessing"):
                 with st.spinner("Processing vessel segmentation..."):
-                    results = preprocess_vessel_stepwise(img_np)
+                    results = preprocess_vessel_stepwise(img_np_vessel)
                     
                     st.session_state['vessel_preprocessed'] = results['step5_final']
                     st.session_state['vessel_results'] = results
@@ -372,7 +263,7 @@ def Preprocessing():
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        st.image(img_np, caption="Original Image")
+                        st.image(img_np_vessel, caption="Original Image")
                     
                     with col2:
                         st.image(results['step1_resized'], caption="1.Resized 256 x 256")
@@ -393,10 +284,8 @@ def Preprocessing():
                         st.image(results['step5_final'], caption="5.Median Filter")
                     
                     st.success("✅ Vessel preprocessing completed!")
-        
-    else:
-        st.warning("⚠ Please upload an image to begin preprocessing.")
-        
+        else:
+            st.warning("⚠ Please upload a full fundus image for vessel preprocessing.")
 # ===================== SEGMENTATION ===================== #
 def load_od_oc_model():
     """Load OD/OC segmentation model"""
