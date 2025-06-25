@@ -449,8 +449,10 @@ def FeatureExtraction():
     feat_type = st.selectbox("Feature Source", ["OD/OC Segmentation", "Vessel Segmentation"])
     
     if feat_type == "OD/OC Segmentation":
+        pass
         
     elif feat_type == "Vessel Segmentation":
+        pass
 
 def Classification():
     st.title("Glaucoma Classification")
