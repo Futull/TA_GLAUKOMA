@@ -511,15 +511,15 @@ def main():
         Cover()
     elif page == "About Glaucoma":
         About()
-    elif page == "1.Preprocessing":
+    elif page == "Preprocessing":
         Preprocessing()
-    elif page == "2.Segmentation":
+    elif page == "Segmentation":
         Segmentation()
-    elif page == "3.Feature Extraction":
+    elif page == "Feature Extraction":
         FeatureExtraction()
-    elif page == "4.Classification":
+    elif page == "Classification":
         Classification()
-    elif page == "5.Evaluation":
+    elif page == "Evaluation":
         Evaluation()
 
 if __name__ == "__main__":
