@@ -451,7 +451,7 @@ def FeatureExtraction():
     
     if feat_type == "OD/OC Segmentation":
         st.markdown("""
-        *OD/OC Features:*
+        *OD/OC Features:* 
         - Cup-to-Disc Ratio (CDR)
         - Disc area and cup area
         - Rim area
