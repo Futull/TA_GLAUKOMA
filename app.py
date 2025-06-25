@@ -3,18 +3,13 @@ from PIL import Image
 import os 
 from skimage.measure import label, regionprops 
 from skimage.morphology import disk, opening, closing 
-from skimage.filters import gaussian 
+from skimage.filters import gaussian
 import cv2
 import numpy as np 
 import torch
 from torchvision import transforms
 import matplotlib.pyplot as plt
 from scipy import ndimage
-import pandas as pd
-from skimage.measure import label, regionprops
-from skimage.morphology import remove_small_objects, remove_small_holes
-from skimage.util import img_as_ubyte
-from skimage.feature import graycomatrix, graycoprops
 from model_architecture import Build_UNet  # OD/OC
 from vessel_architecture import Build_UNet_Vessel  # VESSEL
 
@@ -45,7 +40,7 @@ def Cover():
     st.sidebar.info(
         "Navigation Instructions:\n"
         "- Go to *Preprocessing* to enhance image quality\n"
-        "- Go to *Segmentation* To detect and identify the Optic Disc (OD), Optic Cup (OC), and retinal blood vessels\n"
+        "- Go to *Segmentation* to choose between OD/OC or Vessel\n"
         "- Go to *Feature Extraction* to analyze CDR, vessel tortuosity, etc.\n"
         "- Use *Classification* to predict glaucoma severity\n"
     )
@@ -386,7 +381,7 @@ def Segmentation():
         selected_task = available_tasks[0]
         st.info(f"Available task: {selected_task}")
     else:
-        selected_task = st.selectbox("Select Segmentation", available_tasks)
+        selected_task = st.selectbox("Select Segmentation Task", available_tasks)
     
     # Ensure correct indentation for the following line
     if selected_task == "OD/OC Segmentation":
@@ -474,162 +469,33 @@ def Segmentation():
                     
                     st.success("✅ Vessel segmentation completed!")
 
-# ===================== EXTRACTION FEATURE PAGES ===================== #
-def get_largest_region(mask):
-    labeled = label(mask)
-    props = regionprops(labeled)
-    if len(props) == 0:
-        return np.zeros_like(mask)
-    largest = max(props, key=lambda x: x.area)
-    return (labeled == largest.label).astype(np.uint8)
-
-def postprocess_mask(mask, disc_min=500, cup_min=200):
-    disc = (mask == 1).astype(np.uint8)
-    cup  = (mask == 2).astype(np.uint8)
-
-    disc = remove_small_objects(disc.astype(bool), min_size=disc_min)
-    disc = remove_small_holes(disc, area_threshold=200)
-    disc = get_largest_region(disc.astype(np.uint8))
-
-    cup = remove_small_objects(cup.astype(bool), min_size=cup_min)
-    cup = remove_small_holes(cup, area_threshold=100)
-    cup = get_largest_region(cup.astype(np.uint8))
-
-    final = np.zeros_like(mask, dtype=np.uint8)
-    final[disc == 1] = 1
-    final[cup == 1] = 2
-    return final, disc, cup
-
-def extract_od_oc_features(mask, preprocessed_image):
-    try:
-        disc_props = regionprops(label(mask == 1))  # Disc is labeled as 1
-        cup_props = regionprops(label(mask == 2))   # Cup is labeled as 2
-
-        if not disc_props or not cup_props:
-            return None
-
-        disc = disc_props[0]
-        cup = cup_props[0]
-
-        # Perhitungan CDR (Cup-to-Disc Ratio)
-        h_cup = cup.bbox[2] - cup.bbox[0]
-        h_disc = disc.bbox[2] - disc.bbox[0]
-        cdr_vertical = h_cup / (h_disc + 1e-8)
-        cdr_area = cup.area / (disc.area + 1e-8)
-        cdr_diameter = cup.major_axis_length / (disc.major_axis_length + 1e-8)
-
-        # Extract GLCM features for OD/OC regions (use preprocessed image)
-        glcm_features = extract_glcm_features(preprocessed_image)
-
-        features = {
-            "cdr_vertical": round(cdr_vertical, 4),
-            "cdr_area": round(cdr_area, 4),
-            "cdr_diameter": round(cdr_diameter, 4),
-
-            "cup_area": cup.area,
-            "cup_perimeter": cup.perimeter,
-            "cup_eccentricity": round(cup.eccentricity, 4),
-            "cup_major_axis": round(cup.major_axis_length, 2),
-            "cup_minor_axis": round(cup.minor_axis_length, 2),
-            "cup_extent": round(cup.extent, 4),
-            "cup_solidity": round(cup.solidity, 4),
-            "cup_equiv_diameter": round(cup.equivalent_diameter, 2),
-
-            "disc_area": disc.area,
-            "disc_perimeter": disc.perimeter,
-            "disc_eccentricity": round(disc.eccentricity, 4),
-            "disc_major_axis": round(disc.major_axis_length, 2),
-            "disc_minor_axis": round(disc.minor_axis_length, 2),
-            "disc_extent": round(disc.extent, 4),
-            "disc_solidity": round(disc.solidity, 4),
-            "disc_equiv_diameter": round(disc.equivalent_diameter, 2),
-
-            **glcm_features  # Add GLCM features to the dictionary
-        }
-
-        return features
-    except Exception as e:
-        st.error(f"Error extracting OD/OC features: {e}")
-        return None
-
-def extract_glcm_features(image):
-    """Extract GLCM features for OD/OC"""
-    try:
-        # Convert to grayscale if needed
-        if len(image.shape) == 3:
-            gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        else:
-            gray_image = image
-            
-        # Convert the image to grayscale and compute GLCM
-        image_ubyte = img_as_ubyte(gray_image)
-        glcm = graycomatrix(image_ubyte, distances=[1], angles=[0, np.pi/4, np.pi/2, 3*np.pi/4], levels=256, symmetric=True, normed=True)
-        
-        # Extract GLCM properties
-        glcm_props = ['contrast', 'correlation', 'energy', 'homogeneity']
-        glcm_features = {f"{prop}_odoc": np.mean(graycoprops(glcm, prop)) for prop in glcm_props}
-
-        return glcm_features
-    except Exception as e:
-        st.error(f"Error extracting GLCM features: {e}")
-        return {}
-
-def extract_vessel_features(vessel_image):
-    """Extract vessel features"""
-    try:
-        # Convert to grayscale if needed
-        if len(vessel_image.shape) == 3:
-            vessel_gray = cv2.cvtColor(vessel_image, cv2.COLOR_RGB2GRAY)
-        else:
-            vessel_gray = vessel_image
-            
-        # Example: Calculating the vessel tortuosity (can be replaced with actual calculation)
-        tortuosity = np.sum(vessel_gray) / vessel_gray.shape[0]  # Simplified tortuosity measure
-
-        # More complex features like skeleton length, bifurcation points, etc., can be added here
-        features = {
-            "vessel_tortuosity": round(tortuosity, 4),
-            "vessel_density": np.sum(vessel_gray) / (vessel_gray.shape[0] * vessel_gray.shape[1]),
-            "vessel_skeleton_length": np.sum(vessel_gray),  # Simplified feature (just an example)
-        }
-
-        return features
-    except Exception as e:
-        st.error(f"Error extracting vessel features: {e}")
-        return None
+# ===================== OTHER PAGES ===================== #
 
 def FeatureExtraction():
     st.title("Feature Extraction")
-
-    # Use radio buttons to choose the feature extraction mode
-    extraction_mode = st.radio("Select Segmentation for Feature Extraction", ("OD/OC Feature Extraction", "Vessel Feature Extraction"))
-
-    if extraction_mode == "OD/OC Feature Extraction":
-        st.subheader("OD/OC Feature Extraction")
-
-        segmentation_result = st.session_state.get('segmentation_map', None)
-        preprocessed_image = st.session_state.get('preprocessed_image', None)
-
-        if segmentation_result is not None and preprocessed_image is not None:
-            # Display the colored segmentation for visualization
-            colored_seg = st.session_state.get('colored_segmentation', None)
-            if colored_seg is not None:
-                st.image(colored_seg, caption="Segmented OD/OC Image", use_container_width=True)
-
-            # Extract OD/OC features using the segmentation map
-            features = extract_od_oc_features(segmentation_result, preprocessed_image)
-            if features:
-                # Store features in session_state to preserve them
-                st.session_state['od_oc_features'] = features
-
-                # Display features in DataFrame
-                od_oc_df = pd.DataFrame([features])
-                st.subheader("OD/OC Extracted Features")
-                st.dataframe(od_oc_df)
-
-                # Plotting the extracted OD/OC features
-                fig, ax = plt.subplots(figsize=(12, 6))
-                ax.bar(features.keys(), features.values())
+    feat_type = st.selectbox("Feature Source", ["OD/OC Segmentation", "Vessel Segmentation"])
+    
+    if feat_type == "OD/OC Segmentation":
+        st.markdown("""
+        *OD/OC Features:* 
+        - Cup-to-Disc Ratio (CDR)
+        - Disc area and cup area
+        - Rim area
+        - Eccentricity
+        - Solidity
+        - Aspect ratio
+        """)
+        
+    elif feat_type == "Vessel Segmentation":
+        st.markdown("""
+        *Vessel Features:*
+        - Vessel tortuosity
+        - Skeleton length
+        - Bifurcation points
+        - Vessel density
+        - Average vessel width
+        - Fractal dimension
+        """)
 
 def Classification():
     st.title("Glaucoma Classification")
