@@ -398,7 +398,6 @@ def Preprocessing():
         st.warning("⚠ Please upload an image to begin preprocessing.")
         
 # ===================== SEGMENTATION ===================== #
-@st.cache_resource
 def load_od_oc_model():
     """Load OD/OC segmentation model"""
     try:
@@ -410,7 +409,6 @@ def load_od_oc_model():
         st.error(f"Error loading OD/OC model: {e}")
         return None
 
-@st.cache_resource
 def load_vessel_model():
     """Load vessel segmentation model"""
     try:
