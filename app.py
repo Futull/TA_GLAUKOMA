@@ -10,6 +10,9 @@ import torch
 from torchvision import transforms
 import matplotlib.pyplot as plt
 from scipy import ndimage
+from model_architecture import Build_UNet  # OD/OC
+from vessel_architecture import Build_UNet_Vessel  # VESSEL
+
 
 # ===================== COVER PAGE ===================== #
 
@@ -393,32 +396,166 @@ def Preprocessing():
         
     else:
         st.warning("⚠ Please upload an image to begin preprocessing.")
+        
 # ===================== SEGMENTATION ===================== #
+@st.cache_resource
+def load_od_oc_model():
+    """Load OD/OC segmentation model"""
+    try:
+        model = Build_UNet()
+        model.load_state_dict(torch.load('fix_model_odoc.pt', map_location='cpu'))
+        model.eval()
+        return model
+    except Exception as e:
+        st.error(f"Error loading OD/OC model: {e}")
+        return None
+
+@st.cache_resource
+def load_vessel_model():
+    """Load vessel segmentation model"""
+    try:
+        model = Build_UNet_Vessel()
+        model.load_state_dict(torch.load('fix_model_vessel.pt', map_location='cpu'))
+        model.eval()
+        return model
+    except Exception as e:
+        st.error(f"Error loading vessel model: {e}")
+        return None
+
+def predict_od_oc(model, image):
+    """Predict OD/OC segmentation"""
+    # Prepare image
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    
+    if isinstance(image, np.ndarray):
+        image = Image.fromarray(image)
+    
+    input_tensor = transform(image).unsqueeze(0)
+    
+    with torch.no_grad():
+        prediction = model(input_tensor)
+        prediction = torch.sigmoid(prediction)
+        prediction = prediction.squeeze(0).cpu().numpy()
+    
+    return prediction
+
+def predict_vessel(model, image):
+    """Predict vessel segmentation"""
+    # Stack green channel to 3 channels
+    if len(image.shape) == 3:
+        green_channel = image[:, :, 1]
+    else:
+        green_channel = image
+    
+    # Stack to 3 channels
+    image_3ch = np.stack([green_channel, green_channel, green_channel], axis=-1)
+    
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    
+    if isinstance(image_3ch, np.ndarray):
+        image_3ch = Image.fromarray(image_3ch)
+    
+    input_tensor = transform(image_3ch).unsqueeze(0)
+    
+    with torch.no_grad():
+        prediction = model(input_tensor)
+        prediction = torch.sigmoid(prediction)
+        prediction = prediction.squeeze(0).cpu().numpy()
+    
+    return prediction
+
+# ===================== SEGMENTATION PAGE ===================== #
+
 def Segmentation():
     st.title("Segmentation")
     
-    if 'preprocessed_image' not in st.session_state and 'vessel_preprocessed' not in st.session_state:
+    if 'task_type' not in st.session_state:
         st.warning("⚠ Please complete preprocessing first.")
         return
     
-    seg_type = st.radio("Select segmentation type:", ["Optic Disc & Cup", "Blood Vessel"])
+    task_type = st.session_state['task_type']
     
-    if st.button("🔁 Load Model & Run Segmentation"):
-        st.info("🔄 Loading model and running segmentation...")
-        st.warning("⚠ Model loading functionality needs to be implemented.")
+    if task_type == 'OD/OC':
+        st.subheader("OD/OC Segmentation")
         
-        with st.spinner("Processing..."):
-            if seg_type == "Optic Disc & Cup":
-                if 'preprocessed_image' in st.session_state:
-                    image = st.session_state['preprocessed_image']
-                    st.image(image, caption="Preprocessed for OD/OC Segmentation")
+        if 'preprocessed_image' in st.session_state:
+            preprocessed_img = st.session_state['preprocessed_image']
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(preprocessed_img, caption="Preprocessed Image")
+            
+            if st.button("Run OD/OC Segmentation"):
+                with st.spinner("Loading model and running segmentation..."):
+                    model = load_od_oc_model()
                     
-            elif seg_type == "Blood Vessel":
-                if 'vessel_preprocessed' in st.session_state:
-                    image = st.session_state['vessel_preprocessed']
-                    st.image(image, caption="Preprocessed for Vessel Segmentation")
+                    if model is not None:
+                        prediction = predict_od_oc(model, preprocessed_img)
+                        
+                        # Convert prediction to displayable format
+                        if len(prediction.shape) == 3:
+                            od_mask = (prediction[0] > 0.5).astype(np.uint8) * 255
+                            oc_mask = (prediction[1] > 0.5).astype(np.uint8) * 255
+                            
+                            with col2:
+                                st.image(od_mask, caption="OD Segmentation")
+                            
+                            col3, col4 = st.columns(2)
+                            with col3:
+                                st.image(oc_mask, caption="OC Segmentation")
+                            
+                            # Save results
+                            st.session_state['od_mask'] = od_mask
+                            st.session_state['oc_mask'] = oc_mask
+                            
+                            st.success("✅ OD/OC segmentation completed!")
+                        else:
+                            mask = (prediction > 0.5).astype(np.uint8) * 255
+                            with col2:
+                                st.image(mask, caption="Segmentation Result")
+                            st.session_state['seg_mask'] = mask
+                            st.success("✅ Segmentation completed!")
+        else:
+            st.warning("⚠ No preprocessed image found for OD/OC.")
+    
+    elif task_type == 'Vessel':
+        st.subheader("Vessel Segmentation")
         
-        st.success("✅ Segmentation completed.")
+        if 'vessel_preprocessed' in st.session_state:
+            preprocessed_img = st.session_state['vessel_preprocessed']
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(preprocessed_img, caption="Preprocessed Image")
+            
+            if st.button("Run Vessel Segmentation"):
+                with st.spinner("Loading model and running segmentation..."):
+                    model = load_vessel_model()
+                    
+                    if model is not None:
+                        prediction = predict_vessel(model, preprocessed_img)
+                        
+                        # Convert prediction to displayable format
+                        vessel_mask = (prediction > 0.5).astype(np.uint8) * 255
+                        if len(vessel_mask.shape) == 3:
+                            vessel_mask = vessel_mask[0]
+                        
+                        with col2:
+                            st.image(vessel_mask, caption="Vessel Segmentation")
+                        
+                        # Save results
+                        st.session_state['vessel_mask'] = vessel_mask
+                        
+                        st.success("✅ Vessel segmentation completed!")
+        else:
+            st.warning("⚠ No preprocessed image found for vessel.")
+
 
 # ===================== OTHER PAGES ===================== #
 
