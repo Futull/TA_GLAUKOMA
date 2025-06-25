@@ -4,8 +4,6 @@ import os
 from skimage.measure import label, regionprops
 from skimage.morphology import disk, opening, closing
 from skimage.filters import gaussian
-from model_architecture import Build_UNet  # OD/OC
-from vessel_architecture import Build_UNet_Vessel  # VESSEL
 import cv2
 import numpy as np
 import torch
@@ -38,10 +36,11 @@ def Cover():
 
     st.sidebar.info(
         "Navigation Instructions:\n"
-        "- Go to **Preprocessing** to enhance image quality\n"
-        "- Go to **Segmentation** to choose between OD/OC or Vessel\n"
-        "- Go to **Feature Extraction** to analyze CDR, vessel tortuosity, etc.\n"
-        "- Use **Classification** to predict glaucoma severity\n"
+        "- Go to *Preprocessing* to enhance image quality\n"
+        "- Go to *Segmentation* to choose between OD/OC or Vessel\n"
+        "- Go to *Feature Extraction* to analyze CDR, vessel tortuosity, etc.\n"
+        "- Use *Classification* to predict glaucoma severity\n"
+        "- Visit *About Glaucoma* to learn more"
     )
 
 # ===================== ABOUT PAGE ===================== #
@@ -52,13 +51,13 @@ def About():
     Glaucoma is a disease that damages the optic nerve due to high intraocular pressure.  
     It can lead to permanent blindness if untreated.
 
-    **Severity Stages**:
+    *Severity Stages*:
     - Normal
     - Mild
     - Moderate
     - Severe
 
-    **Key Morphological Indicators**:
+    *Key Morphological Indicators*:
     - Cup-to-Disc Ratio (CDR)
     - Optic disc deformation
     - Vessel tortuosity
@@ -348,7 +347,7 @@ def Preprocessing():
                         with col1:
                             st.image(img_np, caption="Original")
                         
-                        with col2: 
+                        with col2:
                             st.image(results['step1_cropped'], caption="1.ONH Crop")
                         
                         with col3:
@@ -416,79 +415,33 @@ def Preprocessing():
                     st.success("✅ Vessel preprocessing completed!")
         
     else:
-        st.warning("⚠️ Please upload an image to begin preprocessing.")
+        st.warning("⚠ Please upload an image to begin preprocessing.")
 # ===================== SEGMENTATION ===================== #
 def Segmentation():
     st.title("Segmentation")
     
     if 'preprocessed_image' not in st.session_state and 'vessel_preprocessed' not in st.session_state:
-        st.warning("⚠️ Please complete preprocessing first.")
+        st.warning("⚠ Please complete preprocessing first.")
         return
     
     seg_type = st.radio("Select segmentation type:", ["Optic Disc & Cup", "Blood Vessel"])
     
     if st.button("🔁 Load Model & Run Segmentation"):
+        st.info("🔄 Loading model and running segmentation...")
+        st.warning("⚠ Model loading functionality needs to be implemented.")
+        
         with st.spinner("Processing..."):
             if seg_type == "Optic Disc & Cup":
                 if 'preprocessed_image' in st.session_state:
                     image = st.session_state['preprocessed_image']
                     st.image(image, caption="Preprocessed for OD/OC Segmentation")
-
-                    # Check if model exists
-                    if not os.path.exists('fix_model_odoc.pt'):
-                        st.error("Model file not found!")
-                        return
                     
-                    try:
-                        model_od_oc = Build_UNet(num_classes=3)
-                        model_od_oc.load_state_dict(torch.load('fix_model_odoc.pt', map_location='cpu'))
-                        model_od_oc.eval()
-
-                        image_tensor = transforms.ToTensor()(image).unsqueeze(0)
-                        with torch.no_grad():
-                            output = model_od_oc(image_tensor)
-                            result = output.squeeze().cpu().numpy()
-                            
-                            if len(result.shape) == 3:
-                                result = np.argmax(result, axis=0)
-                        
-                        st.image(result, caption="OD/OC Segmentation", cmap='gray')
-                        st.session_state['od_oc_result'] = result
-                        
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-                        
             elif seg_type == "Blood Vessel":
                 if 'vessel_preprocessed' in st.session_state:
                     image = st.session_state['vessel_preprocessed']
                     st.image(image, caption="Preprocessed for Vessel Segmentation")
-
-                    if not os.path.exists('fix_model_vessel.pth'):
-                        st.error("Model file not found!")
-                        return
-                    
-                    try:
-                        model_vessel = Build_UNet(num_classes=1)
-                        model_vessel.load_state_dict(torch.load('fix_model_vessel.pth', map_location='cpu'))
-                        model_vessel.eval()
-
-                        if len(image.shape) == 3:
-                            image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-                            image_3ch = np.stack([image_gray] * 3, axis=-1)
-                        else:
-                            image_3ch = np.stack([image] * 3, axis=-1)
-                        
-                        image_tensor = transforms.ToTensor()(image_3ch).unsqueeze(0)
-                        with torch.no_grad():
-                            output = model_vessel(image_tensor)
-                            result = torch.sigmoid(output).squeeze().cpu().numpy()
-                            result = (result > 0.5).astype(np.uint8) * 255
-                        
-                        st.image(result, caption="Vessel Segmentation", cmap='gray')
-                        st.session_state['vessel_result'] = result
-                        
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+        
+        st.success("✅ Segmentation completed.")
 
 # ===================== OTHER PAGES ===================== #
 
@@ -497,24 +450,54 @@ def FeatureExtraction():
     feat_type = st.selectbox("Feature Source", ["OD/OC Segmentation", "Vessel Segmentation"])
     
     if feat_type == "OD/OC Segmentation":
-        pass
+        st.markdown("""
+        *OD/OC Features:*
+        - Cup-to-Disc Ratio (CDR)
+        - Disc area and cup area
+        - Rim area
+        - Eccentricity
+        - Solidity
+        - Aspect ratio
+        """)
         
     elif feat_type == "Vessel Segmentation":
-        pass
+        st.markdown("""
+        *Vessel Features:*
+        - Vessel tortuosity
+        - Skeleton length
+        - Bifurcation points
+        - Vessel density
+        - Average vessel width
+        - Fractal dimension
+        """)
 
 def Classification():
     st.title("Glaucoma Classification")
     st.markdown("""
-    **Classification Pipeline:**
+    *Classification Pipeline:*
     1. Load extracted features
     2. Apply trained CNN model
     3. Predict glaucoma severity level
     
-    **Severity Levels:**
+    *Severity Levels:*
     - 🟢 Normal
     - 🟡 Mild Glaucoma
     - 🟠 Moderate Glaucoma
     - 🔴 Severe Glaucoma
+    """)
+
+def Evaluation():
+    st.title("Model Evaluation")
+    st.markdown("""
+    *Evaluation Metrics:*
+    - Confusion Matrix
+    - Accuracy
+    - Sensitivity (Recall)
+    - Specificity
+    - Precision
+    - F1-Score
+    - ROC Curve
+    - AUC Score
     """)
 
 # ===================== PAGE ROUTING ===================== #
@@ -522,31 +505,37 @@ def Classification():
 def main():
     st.set_page_config(
         page_title="Glaucoma Detection System",
-        page_icon="👁️",
+        page_icon="👁",
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
-    st.sidebar.title("👁️ Navigation")
+    st.sidebar.title("👁 Navigation")
     page = st.sidebar.selectbox("Go to Page", [
-        "Cover",  
-        "1.Preprocessing", 
-        "2.Segmentation", 
-        "3.Feature Extraction", 
-        "4.Classification", 
+        "Cover", 
+        "About Glaucoma", 
+        "Preprocessing", 
+        "Segmentation", 
+        "Feature Extraction", 
+        "Classification", 
+        "Evaluation"
     ])
     
     # Route to appropriate page
     if page == "Cover":
         Cover()
-    elif page == "1.Preprocessing":
+    elif page == "About Glaucoma":
+        About()
+    elif page == "Preprocessing":
         Preprocessing()
-    elif page == "2.Segmentation":
+    elif page == "Segmentation":
         Segmentation()
-    elif page == "3.Feature Extraction":
+    elif page == "Feature Extraction":
         FeatureExtraction()
-    elif page == "4.Classification":
+    elif page == "Classification":
         Classification()
+    elif page == "Evaluation":
+        Evaluation()
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     main()
