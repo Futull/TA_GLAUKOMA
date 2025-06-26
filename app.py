@@ -1,6 +1,6 @@
 import streamlit as st
 from PIL import Image  
-import os  
+import os   
 from skimage.measure import label, regionprops  
 from skimage.morphology import disk, opening, closing, remove_small_objects, remove_small_holes, skeletonize
 from skimage.filters import gaussian
