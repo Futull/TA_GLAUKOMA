@@ -863,7 +863,7 @@ def Detection():
                         'vessel_area','mean_energy_vessel', 'vessel_length','mean_contrast_vessel','mean_homogeneity_vessel',
                         'Number_of_segments','mean_correlation_vessel','Bifurcation_Points','mean_correlation_cdr',
                         'disc_eccentricity','mean_homogeneity_cdr','Std_Dev_TC','cup_eccentricity'
-                        'Mean Tortuosity','mean_contrast_cdr','cup_extent','mean_energy_cdr
+                        'Mean Tortuosity','mean_contrast_cdr','cup_extent','mean_energy_cdr'
                     ]
                     
                     # Prepare feature vector
