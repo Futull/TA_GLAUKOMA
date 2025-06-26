@@ -524,10 +524,11 @@ def Detection():
     st.header("⚙️ Step 1: PREPROCESSING ")
     st.markdown("Upload your fundus images and select the preprocessing pipeline based on your analysis needs.")
 
+    # Inisialisasi session state untuk nama file terakhir
     if 'last_uploaded_od_name' not in st.session_state:
-    st.session_state['last_uploaded_od_name'] = None
+        st.session_state['last_uploaded_od_name'] = None
     if 'last_uploaded_vessel_name' not in st.session_state:
-    st.session_state['last_uploaded_vessel_name'] = None
+        st.session_state['last_uploaded_vessel_name'] = None
     
     # Image upload section
     col1, col2 = st.columns(2)
