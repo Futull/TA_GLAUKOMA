@@ -494,7 +494,349 @@ def Detection():
         if st.button("🔄 RESET ALL", key="reset_all", type="secondary", use_container_width=True):
             reset_all_steps()
             st.rerun()
-    # ... (PREPROCESSING, SEGMENTATION, FEATURE EXTRACTION steps unchanged) ...
+            
+    # STEP 1: PREPROCESSING
+    st.header("⚙️ Step 1: PREPROCESSING ")
+    st.markdown("Upload your fundus images and select the preprocessing pipeline based on your analysis needs.")
+    
+    # Image upload section
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🔘 Optic Disc & Cup (OD/OC)")
+        st.markdown("*For Cup-to-Disc Ratio analysis*")
+        uploaded_file_od = st.file_uploader("Upload Cropped ONH Image", type=["png", "jpg", "jpeg"], key="od_oc_upload")
+        
+        if uploaded_file_od:
+            image_od = Image.open(uploaded_file_od).convert('RGB')
+            img_np_od = np.array(image_od)
+            current_hash = get_image_hash(img_np_od)
+            
+            # Check if image has changed
+            if st.session_state.get('current_od_image_hash') != current_hash:
+                reset_od_oc_pipeline()
+                reset_extraction_and_classification()  # PERBAIKAN: Reset extraction dan classification
+                st.session_state['current_od_image_hash'] = current_hash
+                st.rerun()
+            
+            st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
+            
+            if st.button("🟢 Apply OD/OC Preprocessing", key="preprocess_od_oc"):
+                with st.spinner("Processing OD/OC preprocessing..."):
+                    results = preprocess_od_oc_stepwise(img_np_od)
+                    st.session_state['preprocessing_results_od'] = results
+                    st.session_state['preprocessed_image_od'] = results['step6_final']
+                    st.session_state['original_image_od'] = img_np_od
+                    st.session_state.step_completed['preprocessing'] = True
+                    # PERBAIKAN: Reset extraction dan classification ketika preprocessing ulang
+                    reset_extraction_and_classification()
+                    st.success("✅ OD/OC preprocessing completed!")
+        
+        # Always show results if they exist in session state
+        if st.session_state.get('preprocessing_results_od') is not None:
+            results = st.session_state['preprocessing_results_od']
+            original_img = st.session_state['original_image_od']
+            
+            st.subheader("🔄 OD/OC Preprocessing Pipeline Results")
+            cols = st.columns(4)
+            
+            with cols[0]:
+                st.image(original_img, caption="Original")
+            with cols[1]:
+                st.image(results['step1_resized'], caption="1. Resized")
+            with cols[2]:
+                st.image(results['step2_sharpened'], caption="2. Sharpened")
+            with cols[3]:
+                st.image(results['step3_color_norm'], caption="3. Color Norm")
+            
+            cols2 = st.columns(3)
+            with cols2[0]:
+                st.image(results['step4_gamma'], caption="4. Gamma Correct")
+            with cols2[1]:
+                st.image(results['step5_clahe'], caption="5. CLAHE")
+            with cols2[2]:
+                st.image(results['step6_final'], caption="6. Final Result")
+    
+    with col2:
+        st.subheader("🩸 Retina Vessel")
+        st.markdown("*For Retina Blood Vessel Morphology Analysis*")
+        uploaded_file_vessel = st.file_uploader("Upload Full Fundus Image", type=["png", "jpg", "jpeg"], key="vessel_upload")
+        
+        if uploaded_file_vessel:
+            image_vessel = Image.open(uploaded_file_vessel).convert('RGB')
+            img_np_vessel = np.array(image_vessel)
+            current_hash = get_image_hash(img_np_vessel)
+            
+            # Check if image has changed
+            if st.session_state.get('current_vessel_image_hash') != current_hash:
+                reset_vessel_pipeline()
+                reset_extraction_and_classification()  # PERBAIKAN: Reset extraction dan classification
+                st.session_state['current_vessel_image_hash'] = current_hash
+                st.rerun()
+            
+            st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
+            
+            if st.button("🟢 Apply Vessel Preprocessing", key="preprocess_vessel"):
+                with st.spinner("Processing vessel preprocessing..."):
+                    results = preprocess_vessel_stepwise(img_np_vessel)
+                    st.session_state['preprocessing_results_vessel'] = results
+                    st.session_state['preprocessed_image_vessel'] = results['step5_final']
+                    st.session_state['original_image_vessel'] = img_np_vessel
+                    st.session_state.step_completed['preprocessing'] = True
+                    # PERBAIKAN: Reset extraction dan classification ketika preprocessing ulang
+                    reset_extraction_and_classification()
+                    st.success("✅ Vessel preprocessing completed!")
+        
+        # Always show results if they exist in session state
+        if st.session_state.get('preprocessing_results_vessel') is not None:
+            results = st.session_state['preprocessing_results_vessel']
+            original_img = st.session_state['original_image_vessel']
+            
+            st.subheader("🔄 Vessel Preprocessing Pipeline Results")
+            cols = st.columns(3)
+            
+            with cols[0]:
+                st.image(original_img, caption="Original")
+            with cols[1]:
+                st.image(results['step1_resized'], caption="1. Resized")
+            with cols[2]:
+                st.image(results['step2_green'], caption="2. Green Channel")
+            
+            cols2 = st.columns(3)
+            with cols2[0]:
+                st.image(results['step3_gamma'], caption="3. Gamma Correct")
+            with cols2[1]:
+                st.image(results['step4_clahe'], caption="4. CLAHE")
+            with cols2[2]:
+                st.image(results['step5_final'], caption="5. Final Result")
+    
+    st.markdown("---")
+    
+    # STEP 2: SEGMENTATION
+    # Check if any preprocessing is completed
+    has_od_preprocessing = st.session_state.get('preprocessed_image_od') is not None
+    has_vessel_preprocessing = st.session_state.get('preprocessed_image_vessel') is not None
+    
+    if has_od_preprocessing or has_vessel_preprocessing:
+        st.header("⚙️ Step 2: SEGMENTATION")
+        st.markdown("Perform automatic segmentation using trained deep learning models.")
+        
+        segmentation_cols = st.columns(2)
+        
+        # OD/OC Segmentation
+        if has_od_preprocessing:
+            with segmentation_cols[0]:
+                st.subheader("🔘 OD/OC Segmentation")
+                preprocessed_img_od = st.session_state['preprocessed_image_od']
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.image(preprocessed_img_od, caption="Preprocessed Image")
+                
+                # Show existing segmentation result if available
+                if st.session_state.get('segmentation_completed_od'):
+                    with col2:
+                        st.image(st.session_state['colored_segmentation_od'], caption="OD/OC Segmentation")
+                        st.success("✅ OD/OC segmentation completed!")
+                
+                if st.button("🟢 Run OD/OC Segmentation", key="segment_od_oc"):
+                    with st.spinner("Running OD/OC segmentation..."):
+                        model = load_od_oc_model()
+                        
+                        if model is not None:
+                            prediction = predict_od_oc(model, preprocessed_img_od)
+                            
+                            if len(prediction.shape) == 3 and prediction.shape[0] > 1:
+                                seg_map = np.argmax(prediction, axis=0)
+                            else:
+                                seg_map = prediction.squeeze()
+                            
+                            # Create colored visualization
+                            colored_result = np.zeros((seg_map.shape[0], seg_map.shape[1], 3), dtype=np.uint8)
+                            colored_result[seg_map == 1] = [169, 169, 169]  # OD = Grey
+                            colored_result[seg_map == 2] = [255, 255, 255]  # OC = White
+                            
+                            # Save results to session state
+                            st.session_state['segmentation_map_od'] = seg_map
+                            st.session_state['colored_segmentation_od'] = colored_result
+                            st.session_state['segmentation_completed_od'] = True
+                            st.session_state.step_completed['segmentation'] = True
+                            
+                            # PERBAIKAN: Reset extraction dan classification ketika segmentasi baru
+                            reset_extraction_and_classification()
+                            
+                            with col2:
+                                st.image(colored_result, caption="OD/OC Segmentation")
+                            
+                            st.success("✅ OD/OC segmentation completed!")
+        
+        # Vessel Segmentation
+        if has_vessel_preprocessing:
+            with segmentation_cols[1]:
+                st.subheader("🩸 Retina Vessel Segmentation")
+                preprocessed_img_vessel = st.session_state['preprocessed_image_vessel']
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.image(preprocessed_img_vessel, caption="Preprocessed Image")
+                
+                # Show existing segmentation result if available
+                if st.session_state.get('segmentation_completed_vessel'):
+                    with col2:
+                        st.image(st.session_state['vessel_mask'], caption="Retina Vessel Segmentation")
+                        st.success("✅ Vessel Segmentation Completed!")
+                
+                if st.button("🟢 Run Retina Vessel Segmentation", key="segment_vessel"):
+                    with st.spinner("Running Retina Vessel Segmentation..."):
+                        model = load_vessel_model()
+                        
+                        if model is not None:
+                            prediction = predict_vessel(model, preprocessed_img_vessel)
+                            
+                            # Convert prediction to displayable format
+                            vessel_mask = (prediction > 0.5).astype(np.uint8) * 255
+                            if len(vessel_mask.shape) == 3:
+                                vessel_mask = vessel_mask[0]
+                            
+                            # Save results to session state
+                            st.session_state['vessel_mask'] = vessel_mask
+                            st.session_state['segmentation_completed_vessel'] = True
+                            st.session_state.step_completed['segmentation'] = True
+                            
+                            # PERBAIKAN: Reset extraction dan classification ketika segmentasi baru
+                            reset_extraction_and_classification()
+                            
+                            with col2:
+                                st.image(vessel_mask, caption="Vessel Segmentation")
+                            
+                            st.success("✅ Vessel segmentation completed!")
+        
+        st.markdown("---")
+    
+    # STEP 3: FEATURE EXTRACTION
+    # Check if any segmentation is completed
+    has_od_segmentation = st.session_state.get('segmentation_completed_od')
+    has_vessel_segmentation = st.session_state.get('segmentation_completed_vessel')
+    
+    if has_od_segmentation or has_vessel_segmentation:
+        st.header("⚙️ Step 3: FEATURE EXTRACTION")
+        st.markdown("Extract morphological features from segmentation results for classification.")
+        
+        extraction_cols = st.columns(2)
+        
+        # Feature extraction info
+        with extraction_cols[0]:
+            st.subheader("🔍 Available Features")
+            if has_od_segmentation:
+                st.markdown("""
+                **OD/OC Features:**
+                - Cup-to-Disc Ratio (CDR)
+                - Disc & Cup morphological properties
+                - GLCM texture features
+                """)
+            
+            if has_vessel_segmentation:
+                st.markdown("""
+                **Vessel Features:**
+                - Vessel tortuosity analysis
+                - Bifurcation points detection
+                - Vessel length, area, & density
+                - GLCM texture features
+                """)
+        
+        with extraction_cols[1]:
+            st.subheader("🟢 Start Extraction")
+            
+            # Show existing features if available
+            if st.session_state.get('extracted_features') is not None:
+                st.success("✅ Features already extracted!")
+                st.info("Features are ready for classification.")
+            
+            if st.button("START FEATURE EXTRACTION", key="extract_features", type="primary"):
+                with st.spinner("Extracting features from segmentation results..."):
+                    extracted_features = {}
+                    
+                    # Extract OD/OC features
+                    if has_od_segmentation:
+                        st.write("🔘 Extracting OD/OC Features...")
+                        
+                        # Regionprops features
+                        seg_map = st.session_state['segmentation_map_od']
+                        od_oc_features = extract_od_oc_features(seg_map)
+                        
+                        if od_oc_features:
+                            extracted_features.update(od_oc_features)
+                            st.session_state['extracted_features_od'] = od_oc_features
+                        
+                        # GLCM features from preprocessed image
+                        preprocessed_img = st.session_state['preprocessed_image_od']
+                        glcm_features_od = extract_glcm_features(preprocessed_img)
+                        
+                        # Add suffix to distinguish from vessel GLCM
+                        glcm_features_od_renamed = {f"{k}_cdr": v for k, v in glcm_features_od.items()}
+                        extracted_features.update(glcm_features_od_renamed)
+                    
+                    # Extract Vessel features
+                    if has_vessel_segmentation:
+                        st.write("🩸 Extracting Retina Vessel Features...")
+                        
+                        vessel_mask = st.session_state['vessel_mask']
+                        vessel_features = {}
+                        
+                        # GLCM features from preprocessed vessel image
+                        preprocessed_vessel_img = st.session_state['preprocessed_image_vessel']
+                        glcm_features_vessel = extract_glcm_features(preprocessed_vessel_img)
+                        glcm_features_vessel_renamed = {f"{k}_vessel": v for k, v in glcm_features_vessel.items()}
+                        vessel_features.update(glcm_features_vessel_renamed)
+                        
+                        # Tortuosity features
+                        tortuosity_features = extract_tortuosity_features(vessel_mask)
+                        vessel_features.update(tortuosity_features)
+                        
+                        # Bifurcation features
+                        bifurcation_features = extract_bifurcation_features(vessel_mask)
+                        vessel_features.update(bifurcation_features)
+                        
+                        # Vessel length features
+                        length_features = extract_vessel_length_features(vessel_mask)
+                        vessel_features.update(length_features)
+                        
+                        # Vessel area and density features
+                        area_density_features = extract_vessel_area_density_features(vessel_mask)
+                        vessel_features.update(area_density_features)
+                        
+                        extracted_features.update(vessel_features)
+                        st.session_state['extracted_features_vessel'] = vessel_features
+                    
+                    # Save extracted features
+                    st.session_state['extracted_features'] = extracted_features
+                    st.session_state.step_completed['extraction'] = True
+                    
+                    st.success("✅ Feature extraction completed!")
+        
+        # Display extracted features table if available
+        if st.session_state.get('extracted_features') is not None:
+            st.subheader("📋 Extracted Features Summary")
+            
+            features_df = pd.DataFrame([st.session_state['extracted_features']])
+            
+            # Display features in a more organized way
+            if has_od_segmentation:
+                st.markdown("**🔘 OD/OC Features:**")
+                od_oc_cols = [col for col in features_df.columns if any(x in col.lower() for x in ['cdr', 'cup', 'disc', '_cdr'])]
+                if od_oc_cols:
+                    st.dataframe(features_df[od_oc_cols], use_container_width=True)
+            
+            if has_vessel_segmentation:
+                st.markdown("**🩸 Retina Vessel Features:**")
+                vessel_cols = [col for col in features_df.columns if any(x in col.lower() for x in ['vessel', 'tortuosity', 'bifurcation', 'length', 'area', 'density', '_vessel'])]
+                if vessel_cols:
+                    st.dataframe(features_df[vessel_cols], use_container_width=True)
+            
+            st.markdown("**📊 Complete All Features :**")
+            st.dataframe(features_df, use_container_width=True)
+        
+        st.markdown("---")
 
     # ===================== STEP 4: CLASSIFICATION ===================== #
     if st.session_state.get('extracted_features') is not None:
