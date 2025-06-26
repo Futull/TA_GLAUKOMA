@@ -858,11 +858,22 @@ def Detection():
             with st.spinner("Running SVM classification..."):
                 # (1) Pastikan urutan input vector sesuai urutan selected_features!
                 input_vector = [extracted[feat] for feat in selected_features]
-
+        
+                # ======== DEBUG NILAI FITUR SEBELUM SCALING ========
+                st.subheader("🔎 DEBUG: Nilai 34 Fitur Sebelum Scaling")
+                for f, v in zip(selected_features, input_vector):
+                    st.write(f"{f}: {v}")
+                # ======== END DEBUG ========
+        
                 # (2) Siapkan dan scaling input
                 input_array = np.array(input_vector).reshape(1, -1)
                 scaled_input = scaler.transform(input_array)
-
+        
+                # ======== DEBUG NILAI FITUR SETELAH SCALING ========
+                st.subheader("🔎 DEBUG: Nilai 34 Fitur Setelah Scaling")
+                st.write(scaled_input)
+                # ======== END DEBUG ========
+        
                 # (3) Prediksi
                 prediction = model.predict(scaled_input)[0]
                 probabilities = model.predict_proba(scaled_input)[0]
