@@ -520,28 +520,41 @@ def Detection():
         if key not in st.session_state:
             st.session_state[key] = None
     
-    # STEP 1: PREPROCESSING
-    st.header("⚙️ Step 1: PREPROCESSING ")
-    st.markdown("Upload your fundus images and select the preprocessing pipeline based on your analysis needs.")
+# ============================
+# STEP 1: PREPROCESSING
+# ============================
 
-    # Inisialisasi session state untuk nama file terakhir
-    if 'last_uploaded_od_name' not in st.session_state:
-        st.session_state['last_uploaded_od_name'] = None
-    if 'last_uploaded_vessel_name' not in st.session_state:
-        st.session_state['last_uploaded_vessel_name'] = None
-    
-    # Image upload section
-    col1, col2 = st.columns(2)
+st.header("⚙️ Step 1: PREPROCESSING")
+st.markdown("Upload your fundus images and select the preprocessing pipeline based on your analysis needs.")
 
+# Inisialisasi session state untuk nama file terakhir
+if 'last_uploaded_od_name' not in st.session_state:
+    st.session_state['last_uploaded_od_name'] = None
+if 'last_uploaded_vessel_name' not in st.session_state:
+    st.session_state['last_uploaded_vessel_name'] = None
+
+# Inisialisasi tracker langkah
+if 'step_completed' not in st.session_state:
+    st.session_state['step_completed'] = {
+        'preprocessing': False,
+        'segmentation': False,
+        'extraction': False
+    }
+
+# Buat dua kolom berdampingan
+col1, col2 = st.columns(2)
+
+# ======================================
+# KIRI: OD/OC Preprocessing (col1)
+# ======================================
 with col1:
     st.subheader("🔘 Optic Disc & Cup (OD/OC)")
     st.markdown("*For Cup-to-Disc Ratio analysis*")
     uploaded_file_od = st.file_uploader("Upload Cropped ONH Image", type=["png", "jpg", "jpeg"], key="od_oc_upload")
 
     if uploaded_file_od:
-        # Cek apakah gambar baru
+        # RESET jika user upload gambar baru
         if uploaded_file_od.name != st.session_state['last_uploaded_od_name']:
-            # RESET SESSION STATE SAAT GANTI GAMBAR OD/OC
             st.session_state['preprocessing_results_od'] = None
             st.session_state['preprocessed_image_od'] = None
             st.session_state['original_image_od'] = None
@@ -550,15 +563,17 @@ with col1:
             st.session_state['segmentation_completed_od'] = False
             st.session_state['extracted_features'] = None
             st.session_state['classification_result'] = None
-            st.session_state.step_completed = {'preprocessing': False, 'segmentation': False, 'extraction': False}
-            st.session_state['last_uploaded_od_name'] = uploaded_file_od.name  # Simpan nama terakhir
+            st.session_state.step_completed = {
+                'preprocessing': False,
+                'segmentation': False,
+                'extraction': False
+            }
+            st.session_state['last_uploaded_od_name'] = uploaded_file_od.name
 
-        # Tampilkan gambar
         image_od = Image.open(uploaded_file_od).convert('RGB')
         img_np_od = np.array(image_od)
         st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
 
-        # Tombol preprocessing
         if st.button("🟢 Apply OD/OC Preprocessing", key="preprocess_od_oc"):
             with st.spinner("Processing OD/OC preprocessing..."):
                 results = preprocess_od_oc_stepwise(img_np_od)
@@ -568,14 +583,11 @@ with col1:
                 st.session_state.step_completed['preprocessing'] = True
                 st.success("✅ OD/OC preprocessing completed!")
 
-    # Tampilkan hasil preprocessing jika sudah ada
     if st.session_state['preprocessing_results_od'] is not None:
         results = st.session_state['preprocessing_results_od']
         original_img = st.session_state['original_image_od']
-
         st.subheader("🔄 OD/OC Preprocessing Pipeline Results")
         cols = st.columns(4)
-
         with cols[0]:
             st.image(original_img, caption="Original")
         with cols[1]:
@@ -593,15 +605,17 @@ with col1:
         with cols2[2]:
             st.image(results['step6_final'], caption="6. Final Result")
 
+# ======================================
+# KANAN: Vessel Preprocessing (col2)
+# ======================================
 with col2:
     st.subheader("🩸 Retina Vessel")
     st.markdown("*For Retina Blood Vessel Morphology Analysis*")
     uploaded_file_vessel = st.file_uploader("Upload Full Fundus Image", type=["png", "jpg", "jpeg"], key="vessel_upload")
 
     if uploaded_file_vessel:
-        # Cek apakah gambar baru
+        # RESET jika user upload gambar baru
         if uploaded_file_vessel.name != st.session_state['last_uploaded_vessel_name']:
-            # RESET SESSION STATE SAAT GANTI GAMBAR VESSEL
             st.session_state['preprocessing_results_vessel'] = None
             st.session_state['preprocessed_image_vessel'] = None
             st.session_state['original_image_vessel'] = None
@@ -609,15 +623,17 @@ with col2:
             st.session_state['segmentation_completed_vessel'] = False
             st.session_state['extracted_features'] = None
             st.session_state['classification_result'] = None
-            st.session_state.step_completed = {'preprocessing': False, 'segmentation': False, 'extraction': False}
-            st.session_state['last_uploaded_vessel_name'] = uploaded_file_vessel.name  # Simpan nama terakhir
+            st.session_state.step_completed = {
+                'preprocessing': False,
+                'segmentation': False,
+                'extraction': False
+            }
+            st.session_state['last_uploaded_vessel_name'] = uploaded_file_vessel.name
 
-        # Tampilkan gambar
         image_vessel = Image.open(uploaded_file_vessel).convert('RGB')
         img_np_vessel = np.array(image_vessel)
         st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
 
-        # Tombol preprocessing
         if st.button("🟢 Apply Vessel Preprocessing", key="preprocess_vessel"):
             with st.spinner("Processing vessel preprocessing..."):
                 results = preprocess_vessel_stepwise(img_np_vessel)
@@ -627,14 +643,11 @@ with col2:
                 st.session_state.step_completed['preprocessing'] = True
                 st.success("✅ Vessel preprocessing completed!")
 
-    # Tampilkan hasil preprocessing jika sudah ada
     if st.session_state['preprocessing_results_vessel'] is not None:
         results = st.session_state['preprocessing_results_vessel']
         original_img = st.session_state['original_image_vessel']
-
         st.subheader("🔄 Vessel Preprocessing Pipeline Results")
         cols = st.columns(3)
-
         with cols[0]:
             st.image(original_img, caption="Original")
         with cols[1]:
@@ -649,6 +662,7 @@ with col2:
             st.image(results['step4_clahe'], caption="4. CLAHE")
         with cols2[2]:
             st.image(results['step5_final'], caption="5. Final Result")
+
     
     st.markdown("---")
     
