@@ -890,6 +890,9 @@ def Detection():
                 prob_df = pd.DataFrame([probabilities], columns=[label_map[i] for i in range(len(probabilities))])
                 st.dataframe(prob_df, use_container_width=True)
 
+                model, scaler, selected_features = load_svm_classifier()
+                st.write("Model classes:", model.classes_)
+
         st.sidebar.markdown("---")
         st.sidebar.subheader("🔄 Progress Tracker")
         progress_items = [
