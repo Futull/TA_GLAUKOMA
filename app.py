@@ -856,16 +856,18 @@ def Detection():
 
         if st.button("🧠 Run Classification", key="run_classification"):
             with st.spinner("Running SVM classification..."):
-                # (1) Pastikan urutan input vector sesuai urutan selected_features!
-                input_vector = [extracted[feat] for feat in selected_features]
+                # Pastikan semua fitur yang dibutuhkan model ada di extracted_features
+                for f in selected_features:
+                    if f not in extracted_features:
+                        extracted_features[f] = 0  # atau np.nan jika kamu mau
         
-                # ======== DEBUG NILAI FITUR SEBELUM SCALING ========
+                input_vector = [extracted_features[f] for f in selected_features]
+        
+                # Debug dan prediksi lanjut, dst...
                 st.subheader("🔎 DEBUG: Nilai 34 Fitur Sebelum Scaling")
                 for f, v in zip(selected_features, input_vector):
                     st.write(f"{f}: {v}")
-                # ======== END DEBUG ========
         
-                # (2) Siapkan dan scaling input
                 input_array = np.array(input_vector).reshape(1, -1)
                 scaled_input = scaler.transform(input_array)
         
