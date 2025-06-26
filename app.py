@@ -624,7 +624,7 @@ def Detection():
                     st.success("✅ OD/OC preprocessing completed!")
         
         # Always show results if they exist in session state
-        if st.session_state['preprocessing_results_od'] is not None:
+        if st.session_state.get('preprocessing_results_od') is not None:
             results = st.session_state['preprocessing_results_od']
             original_img = st.session_state['original_image_od']
             
@@ -679,7 +679,7 @@ def Detection():
                     st.success("✅ Vessel preprocessing completed!")
         
         # Always show results if they exist in session state
-        if st.session_state['preprocessing_results_vessel'] is not None:
+        if st.session_state.get('preprocessing_results_vessel') is not None:
             results = st.session_state['preprocessing_results_vessel']
             original_img = st.session_state['original_image_vessel']
             
@@ -705,8 +705,8 @@ def Detection():
     
     # STEP 2: SEGMENTATION
     # Check if any preprocessing is completed
-    has_od_preprocessing = st.session_state['preprocessed_image_od'] is not None
-    has_vessel_preprocessing = st.session_state['preprocessed_image_vessel'] is not None
+    has_od_preprocessing = st.session_state.get('preprocessed_image_od') is not None
+    has_vessel_preprocessing = st.session_state.get('preprocessed_image_vessel') is not None
     
     if has_od_preprocessing or has_vessel_preprocessing:
         st.header("⚙️ Step 2: SEGMENTATION")
@@ -725,7 +725,7 @@ def Detection():
                     st.image(preprocessed_img_od, caption="Preprocessed Image")
                 
                 # Show existing segmentation result if available
-                if st.session_state['segmentation_completed_od']:
+                if st.session_state.get('segmentation_completed_od'):
                     with col2:
                         st.image(st.session_state['colored_segmentation_od'], caption="OD/OC Segmentation")
                         st.success("✅ OD/OC segmentation completed!")
@@ -772,7 +772,7 @@ def Detection():
                     st.image(preprocessed_img_vessel, caption="Preprocessed Image")
                 
                 # Show existing segmentation result if available
-                if st.session_state['segmentation_completed_vessel']:
+                if st.session_state.get('segmentation_completed_vessel'):
                     with col2:
                         st.image(st.session_state['vessel_mask'], caption="Retina Vessel Segmentation")
                         st.success("✅ Vessel Segmentation Completed!")
@@ -806,8 +806,8 @@ def Detection():
     
     # STEP 3: FEATURE EXTRACTION
     # Check if any segmentation is completed
-    has_od_segmentation = st.session_state['segmentation_completed_od']
-    has_vessel_segmentation = st.session_state['segmentation_completed_vessel']
+    has_od_segmentation = st.session_state.get('segmentation_completed_od')
+    has_vessel_segmentation = st.session_state.get('segmentation_completed_vessel')
     
     if has_od_segmentation or has_vessel_segmentation:
         st.header("⚙️ Step 3: FEATURE EXTRACTION")
@@ -839,7 +839,7 @@ def Detection():
             st.subheader("🟢 Start Extraction")
             
             # Show existing features if available
-            if st.session_state['extracted_features'] is not None:
+            if st.session_state.get('extracted_features') is not None:
                 st.success("✅ Features already extracted!")
                 st.info("Features are ready for classification.")
             
@@ -906,7 +906,7 @@ def Detection():
                     st.success("✅ Feature extraction completed!")
         
         # Display extracted features table if available
-        if st.session_state['extracted_features'] is not None:
+        if st.session_state.get('extracted_features') is not None:
             st.subheader("📋 Extracted Features Summary")
             
             features_df = pd.DataFrame([st.session_state['extracted_features']])
@@ -930,7 +930,7 @@ def Detection():
         st.markdown("---")
     
     # STEP 4: CLASSIFICATION
-    if st.session_state['extracted_features'] is not None:
+    if st.session_state.get('extracted_features') is not None:
         st.header("⚙️ Step 4: GLAUCOMA CLASSIFICATION")
         st.markdown("Classify Glaucoma Severity using Extracted Morphological Features with SVM.")
         
@@ -938,7 +938,7 @@ def Detection():
         
         with col1:
             # Show existing classification result if available
-            if st.session_state['classification_result'] is not None:
+            if st.session_state.get('classification_result') is not None:
                 st.success("✅ Classification already completed!")
                 st.info("Results are displayed below.")
             
@@ -1017,7 +1017,7 @@ def Detection():
                     st.info("Please ensure the SVM model file exists in 'models/' folder")
         
         # Display results if classification is done
-        if st.session_state['classification_result'] is not None:
+        if st.session_state.get('classification_result') is not None:
             result = st.session_state['classification_result']
             bg_colors = ["#d4edda", "#fff3cd", "#f8d7da", "#f5c6cb"]
             colors = ["🟢", "🟡", "🟠", "🔴"]
@@ -1060,7 +1060,7 @@ def Detection():
         ("Preprocessing", st.session_state.step_completed['preprocessing']),
         ("Segmentation", st.session_state.step_completed['segmentation']),
         ("Feature Extraction", st.session_state.step_completed['extraction']),
-        ("Classification", st.session_state['classification_result'] is not None)
+        ("Classification", st.session_state.get('classification_result') is not None)
     ]
     
     for step, completed in progress_items:
