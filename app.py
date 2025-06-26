@@ -527,91 +527,131 @@ def Detection():
     # Image upload section
     col1, col2 = st.columns(2)
     
-    with col1:
-        st.subheader("🔘 Optic Disc & Cup (OD/OC)")
-        st.markdown("*For Cup-to-Disc Ratio analysis*")
-        uploaded_file_od = st.file_uploader("Upload Cropped ONH Image", type=["png", "jpg", "jpeg"], key="od_oc_upload")
-        
-        if uploaded_file_od:
-            image_od = Image.open(uploaded_file_od).convert('RGB')
-            img_np_od = np.array(image_od)
-            st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
-            
-            if st.button("🟢 Apply OD/OC Preprocessing", key="preprocess_od_oc"):
-                with st.spinner("Processing OD/OC preprocessing..."):
-                    results = preprocess_od_oc_stepwise(img_np_od)
-                    st.session_state['preprocessing_results_od'] = results
-                    st.session_state['preprocessed_image_od'] = results['step6_final']
-                    st.session_state['original_image_od'] = img_np_od
-                    st.session_state.step_completed['preprocessing'] = True
-                    st.success("✅ OD/OC preprocessing completed!")
-        
-        # Always show results if they exist in session state
-        if st.session_state['preprocessing_results_od'] is not None:
-            results = st.session_state['preprocessing_results_od']
-            original_img = st.session_state['original_image_od']
-            
-            st.subheader("🔄 OD/OC Preprocessing Pipeline Results")
-            cols = st.columns(4)
-            
-            with cols[0]:
-                st.image(original_img, caption="Original")
-            with cols[1]:
-                st.image(results['step1_resized'], caption="1. Resized")
-            with cols[2]:
-                st.image(results['step2_sharpened'], caption="2. Sharpened")
-            with cols[3]:
-                st.image(results['step3_color_norm'], caption="3. Color Norm")
-            
-            cols2 = st.columns(3)
-            with cols2[0]:
-                st.image(results['step4_gamma'], caption="4. Gamma Correct")
-            with cols2[1]:
-                st.image(results['step5_clahe'], caption="5. CLAHE")
-            with cols2[2]:
-                st.image(results['step6_final'], caption="6. Final Result")
+    # Inisialisasi session_state untuk file OD/OC
+if 'last_uploaded_od_name' not in st.session_state:
+    st.session_state['last_uploaded_od_name'] = None
+
+with col1:
+    st.subheader("🔘 Optic Disc & Cup (OD/OC)")
+    st.markdown("*For Cup-to-Disc Ratio analysis*")
+    uploaded_file_od = st.file_uploader("Upload Cropped ONH Image", type=["png", "jpg", "jpeg"], key="od_oc_upload")
+
+    if uploaded_file_od:
+        # Cek apakah gambar baru
+        if uploaded_file_od.name != st.session_state['last_uploaded_od_name']:
+            # RESET SESSION STATE SAAT GANTI GAMBAR OD/OC
+            st.session_state['preprocessing_results_od'] = None
+            st.session_state['preprocessed_image_od'] = None
+            st.session_state['original_image_od'] = None
+            st.session_state['segmentation_map_od'] = None
+            st.session_state['colored_segmentation_od'] = None
+            st.session_state['segmentation_completed_od'] = False
+            st.session_state['extracted_features'] = None
+            st.session_state['classification_result'] = None
+            st.session_state.step_completed = {'preprocessing': False, 'segmentation': False, 'extraction': False}
+            st.session_state['last_uploaded_od_name'] = uploaded_file_od.name  # Simpan nama terakhir
+
+        # Tampilkan gambar
+        image_od = Image.open(uploaded_file_od).convert('RGB')
+        img_np_od = np.array(image_od)
+        st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
+
+        # Tombol preprocessing
+        if st.button("🟢 Apply OD/OC Preprocessing", key="preprocess_od_oc"):
+            with st.spinner("Processing OD/OC preprocessing..."):
+                results = preprocess_od_oc_stepwise(img_np_od)
+                st.session_state['preprocessing_results_od'] = results
+                st.session_state['preprocessed_image_od'] = results['step6_final']
+                st.session_state['original_image_od'] = img_np_od
+                st.session_state.step_completed['preprocessing'] = True
+                st.success("✅ OD/OC preprocessing completed!")
+
+    # Tampilkan hasil preprocessing jika sudah ada
+    if st.session_state['preprocessing_results_od'] is not None:
+        results = st.session_state['preprocessing_results_od']
+        original_img = st.session_state['original_image_od']
+
+        st.subheader("🔄 OD/OC Preprocessing Pipeline Results")
+        cols = st.columns(4)
+
+        with cols[0]:
+            st.image(original_img, caption="Original")
+        with cols[1]:
+            st.image(results['step1_resized'], caption="1. Resized")
+        with cols[2]:
+            st.image(results['step2_sharpened'], caption="2. Sharpened")
+        with cols[3]:
+            st.image(results['step3_color_norm'], caption="3. Color Norm")
+
+        cols2 = st.columns(3)
+        with cols2[0]:
+            st.image(results['step4_gamma'], caption="4. Gamma Correct")
+        with cols2[1]:
+            st.image(results['step5_clahe'], caption="5. CLAHE")
+        with cols2[2]:
+            st.image(results['step6_final'], caption="6. Final Result")
+
     
-    with col2:
-        st.subheader("🩸 Retina Vessel")
-        st.markdown("*For Retina Blood Vessel Morphology Analysis*")
-        uploaded_file_vessel = st.file_uploader("Upload Full Fundus Image", type=["png", "jpg", "jpeg"], key="vessel_upload")
-        
-        if uploaded_file_vessel:
-            image_vessel = Image.open(uploaded_file_vessel).convert('RGB')
-            img_np_vessel = np.array(image_vessel)
-            st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
-            
-            if st.button("🟢 Apply Vessel Preprocessing", key="preprocess_vessel"):
-                with st.spinner("Processing vessel preprocessing..."):
-                    results = preprocess_vessel_stepwise(img_np_vessel)
-                    st.session_state['preprocessing_results_vessel'] = results
-                    st.session_state['preprocessed_image_vessel'] = results['step5_final']
-                    st.session_state['original_image_vessel'] = img_np_vessel
-                    st.session_state.step_completed['preprocessing'] = True
-                    st.success("✅ Vessel preprocessing completed!")
-        
-        # Always show results if they exist in session state
-        if st.session_state['preprocessing_results_vessel'] is not None:
-            results = st.session_state['preprocessing_results_vessel']
-            original_img = st.session_state['original_image_vessel']
-            
-            st.subheader("🔄 Vessel Preprocessing Pipeline Results")
-            cols = st.columns(3)
-            
-            with cols[0]:
-                st.image(original_img, caption="Original")
-            with cols[1]:
-                st.image(results['step1_resized'], caption="1. Resized")
-            with cols[2]:
-                st.image(results['step2_green'], caption="2. Green Channel")
-            
-            cols2 = st.columns(3)
-            with cols2[0]:
-                st.image(results['step3_gamma'], caption="3. Gamma Correct")
-            with cols2[1]:
-                st.image(results['step4_clahe'], caption="4. CLAHE")
-            with cols2[2]:
-                st.image(results['step5_final'], caption="5. Final Result")
+    # Inisialisasi session_state untuk file VESSEL
+if 'last_uploaded_vessel_name' not in st.session_state:
+    st.session_state['last_uploaded_vessel_name'] = None
+
+with col2:
+    st.subheader("🩸 Retina Vessel")
+    st.markdown("*For Retina Blood Vessel Morphology Analysis*")
+    uploaded_file_vessel = st.file_uploader("Upload Full Fundus Image", type=["png", "jpg", "jpeg"], key="vessel_upload")
+
+    if uploaded_file_vessel:
+        # Cek apakah gambar baru
+        if uploaded_file_vessel.name != st.session_state['last_uploaded_vessel_name']:
+            # RESET SESSION STATE SAAT GANTI GAMBAR VESSEL
+            st.session_state['preprocessing_results_vessel'] = None
+            st.session_state['preprocessed_image_vessel'] = None
+            st.session_state['original_image_vessel'] = None
+            st.session_state['vessel_mask'] = None
+            st.session_state['segmentation_completed_vessel'] = False
+            st.session_state['extracted_features'] = None
+            st.session_state['classification_result'] = None
+            st.session_state.step_completed = {'preprocessing': False, 'segmentation': False, 'extraction': False}
+            st.session_state['last_uploaded_vessel_name'] = uploaded_file_vessel.name  # Simpan nama terakhir
+
+        # Tampilkan gambar
+        image_vessel = Image.open(uploaded_file_vessel).convert('RGB')
+        img_np_vessel = np.array(image_vessel)
+        st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
+
+        # Tombol preprocessing
+        if st.button("🟢 Apply Vessel Preprocessing", key="preprocess_vessel"):
+            with st.spinner("Processing vessel preprocessing..."):
+                results = preprocess_vessel_stepwise(img_np_vessel)
+                st.session_state['preprocessing_results_vessel'] = results
+                st.session_state['preprocessed_image_vessel'] = results['step5_final']
+                st.session_state['original_image_vessel'] = img_np_vessel
+                st.session_state.step_completed['preprocessing'] = True
+                st.success("✅ Vessel preprocessing completed!")
+
+    # Tampilkan hasil preprocessing jika sudah ada
+    if st.session_state['preprocessing_results_vessel'] is not None:
+        results = st.session_state['preprocessing_results_vessel']
+        original_img = st.session_state['original_image_vessel']
+
+        st.subheader("🔄 Vessel Preprocessing Pipeline Results")
+        cols = st.columns(3)
+
+        with cols[0]:
+            st.image(original_img, caption="Original")
+        with cols[1]:
+            st.image(results['step1_resized'], caption="1. Resized")
+        with cols[2]:
+            st.image(results['step2_green'], caption="2. Green Channel")
+
+        cols2 = st.columns(3)
+        with cols2[0]:
+            st.image(results['step3_gamma'], caption="3. Gamma Correct")
+        with cols2[1]:
+            st.image(results['step4_clahe'], caption="4. CLAHE")
+        with cols2[2]:
+            st.image(results['step5_final'], caption="5. Final Result")
     
     st.markdown("---")
     
