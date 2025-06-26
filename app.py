@@ -943,50 +943,50 @@ def Detection():
     
     # ===================== STEP 4: CLASSIFICATION ===================== #
     # STEP 4: CLASSIFICATION
-if st.session_state.get('extracted_features') is not None:
-    st.header("⚙️ Step 4: CLASSIFICATION")
-    st.markdown("Classify glaucoma severity based on extracted features using trained SVM model.")
-
-    if st.button("🧠 Run Classification", key="run_classification"):
-        with st.spinner("Running SVM classification..."):
-            # Load model, scaler, and feature names
-            model, scaler, selected_features = load_svm_classifier()
-
-            # Get extracted features from session
-            extracted = st.session_state['extracted_features']
-
-            # Filter and order features
-            input_vector = []
-            missing_features = []
-            for feat in selected_features:
-                if feat in extracted:
-                    input_vector.append(extracted[feat])
-                else:
-                    missing_features.append(feat)
-
-            if missing_features:
-                st.error(f"❌ Missing features: {missing_features}")
-                st.stop()
-
-            # Prepare and scale input
-            input_array = np.array(input_vector).reshape(1, -1)
-            scaled_input = scaler.transform(input_array)
-
-            # Run prediction
-            prediction = model.predict(scaled_input)[0]
-            probabilities = model.predict_proba(scaled_input)[0]
-
-            label_map = {0: "Normal", 1: "Mild", 2: "Moderate", 3: "Severe"}
-            result_label = label_map.get(prediction, "Unknown")
-
-            # Save result to session state
-            st.session_state['classification_result'] = result_label
-
-            # Show result
-            st.success(f"🧠 Predicted Glaucoma Severity: **{result_label}**")
-            st.markdown("### 🔢 Class Probabilities")
-            prob_df = pd.DataFrame([probabilities], columns=[label_map[i] for i in range(len(probabilities))])
-            st.dataframe(prob_df, use_container_width=True)
+    if st.session_state.get('extracted_features') is not None:
+        st.header("⚙️ Step 4: CLASSIFICATION")
+        st.markdown("Classify glaucoma severity based on extracted features using trained SVM model.")
+    
+        if st.button("🧠 Run Classification", key="run_classification"):
+            with st.spinner("Running SVM classification..."):
+                # Load model, scaler, and feature names
+                model, scaler, selected_features = load_svm_classifier()
+    
+                # Get extracted features from session
+                extracted = st.session_state['extracted_features']
+    
+                # Filter and order features
+                input_vector = []
+                missing_features = []
+                for feat in selected_features:
+                    if feat in extracted:
+                        input_vector.append(extracted[feat])
+                    else:
+                        missing_features.append(feat)
+    
+                if missing_features:
+                    st.error(f"❌ Missing features: {missing_features}")
+                    st.stop()
+    
+                # Prepare and scale input
+                input_array = np.array(input_vector).reshape(1, -1)
+                scaled_input = scaler.transform(input_array)
+    
+                # Run prediction
+                prediction = model.predict(scaled_input)[0]
+                probabilities = model.predict_proba(scaled_input)[0]
+    
+                label_map = {0: "Normal", 1: "Mild", 2: "Moderate", 3: "Severe"}
+                result_label = label_map.get(prediction, "Unknown")
+    
+                # Save result to session state
+                st.session_state['classification_result'] = result_label
+    
+                # Show result
+                st.success(f"🧠 Predicted Glaucoma Severity: **{result_label}**")
+                st.markdown("### 🔢 Class Probabilities")
+                prob_df = pd.DataFrame([probabilities], columns=[label_map[i] for i in range(len(probabilities))])
+                st.dataframe(prob_df, use_container_width=True)
         
         # Progress indicator
         st.sidebar.markdown("---")
