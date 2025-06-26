@@ -856,14 +856,14 @@ def Detection():
                     
                     # Top 34 features (adjust based on your actual feature selection)
                     top_34_features = [
-                        'cdr_vertical', 'cup_equiv_diameter', 'cup_perimeter', 'cup_minor_axis', 'disc_extent',
-                        'disc_solidity', 'cup_area', 'cup_major_axis', 'disc_perimeter',
-                        'cdr_diameter', 'disc_area', 'disc_major_axis', 'disc_equiv_diameter',
-                        'cdr_area', 'disc_minor_axis', 'cup_solidity', 'vessel_density',
-                        'vessel_area','mean_energy_vessel', 'vessel_length', 'mean_contrast_vessel', 'mean_homogeneity_vessel',
-                        'Number_of_segments', 'mean_correlation_vessel', 'Bifurcation_Points', 'mean_correlation_cdr',
-                        'disc_eccentricity', 'mean_homogeneity_cdr', 'Std_Dev_TC', 'cup_eccentricity'
-                        'Mean Tortuosity', 'mean_contrast_cdr', 'cup_extent', 'mean_energy_cdr
+                        'cdr_vertical','cup_equiv_diameter','cup_perimeter','cup_minor_axis','disc_extent',
+                        'disc_solidity','cup_area','cup_major_axis','disc_perimeter',
+                        'cdr_diameter','disc_area','disc_major_axis','disc_equiv_diameter',
+                        'cdr_area','disc_minor_axis','cup_solidity','vessel_density',
+                        'vessel_area','mean_energy_vessel', 'vessel_length','mean_contrast_vessel','mean_homogeneity_vessel',
+                        'Number_of_segments','mean_correlation_vessel','Bifurcation_Points','mean_correlation_cdr',
+                        'disc_eccentricity','mean_homogeneity_cdr','Std_Dev_TC','cup_eccentricity'
+                        'Mean Tortuosity','mean_contrast_cdr','cup_extent','mean_energy_cdr
                     ]
                     
                     # Prepare feature vector
