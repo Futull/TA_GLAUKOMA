@@ -84,6 +84,20 @@ def reset_classification():
         if key in st.session_state:
             del st.session_state[key]
 
+def reset_extraction_and_classification():
+    """Reset feature extraction and classification when segmentation changes"""
+    extraction_classification_keys = [
+        'extracted_features', 'classification_result', 
+        'extracted_features_od', 'extracted_features_vessel'
+    ]
+    for key in extraction_classification_keys:
+        if key in st.session_state:
+            del st.session_state[key]
+    
+    # Reset step completion for extraction
+    if 'step_completed' in st.session_state:
+        st.session_state.step_completed['extraction'] = False
+
 def reset_all_steps():
     """Reset all pipeline steps"""
     st.session_state.step_completed = {'preprocessing': False, 'segmentation': False, 'extraction': False}
@@ -592,7 +606,7 @@ def Detection():
             # Check if image has changed
             if st.session_state.get('current_od_image_hash') != current_hash:
                 reset_od_oc_pipeline()
-                reset_classification()  # Also reset classification
+                reset_extraction_and_classification()  # PERBAIKAN: Reset extraction dan classification
                 st.session_state['current_od_image_hash'] = current_hash
                 st.rerun()
             
@@ -605,6 +619,8 @@ def Detection():
                     st.session_state['preprocessed_image_od'] = results['step6_final']
                     st.session_state['original_image_od'] = img_np_od
                     st.session_state.step_completed['preprocessing'] = True
+                    # PERBAIKAN: Reset extraction dan classification ketika preprocessing ulang
+                    reset_extraction_and_classification()
                     st.success("✅ OD/OC preprocessing completed!")
         
         # Always show results if they exist in session state
@@ -645,7 +661,7 @@ def Detection():
             # Check if image has changed
             if st.session_state.get('current_vessel_image_hash') != current_hash:
                 reset_vessel_pipeline()
-                reset_classification()  # Also reset classification
+                reset_extraction_and_classification()  # PERBAIKAN: Reset extraction dan classification
                 st.session_state['current_vessel_image_hash'] = current_hash
                 st.rerun()
             
@@ -658,6 +674,8 @@ def Detection():
                     st.session_state['preprocessed_image_vessel'] = results['step5_final']
                     st.session_state['original_image_vessel'] = img_np_vessel
                     st.session_state.step_completed['preprocessing'] = True
+                    # PERBAIKAN: Reset extraction dan classification ketika preprocessing ulang
+                    reset_extraction_and_classification()
                     st.success("✅ Vessel preprocessing completed!")
         
         # Always show results if they exist in session state
@@ -735,6 +753,9 @@ def Detection():
                             st.session_state['segmentation_completed_od'] = True
                             st.session_state.step_completed['segmentation'] = True
                             
+                            # PERBAIKAN: Reset extraction dan classification ketika segmentasi baru
+                            reset_extraction_and_classification()
+                            
                             with col2:
                                 st.image(colored_result, caption="OD/OC Segmentation")
                             
@@ -772,6 +793,9 @@ def Detection():
                             st.session_state['vessel_mask'] = vessel_mask
                             st.session_state['segmentation_completed_vessel'] = True
                             st.session_state.step_completed['segmentation'] = True
+                            
+                            # PERBAIKAN: Reset extraction dan classification ketika segmentasi baru
+                            reset_extraction_and_classification()
                             
                             with col2:
                                 st.image(vessel_mask, caption="Vessel Segmentation")
@@ -972,12 +996,20 @@ def Detection():
                     color_emoji = colors[prediction]
                     bg_color = bg_colors[prediction]
                     
+                    # PERBAIKAN: Simpan hash gambar yang digunakan untuk klasifikasi
+                    # Untuk memastikan klasifikasi terkait dengan gambar yang tepat
+                    classification_image_hash = {
+                        'od_hash': st.session_state.get('current_od_image_hash'),
+                        'vessel_hash': st.session_state.get('current_vessel_image_hash')
+                    }
+                    
                     # Save result
                     st.session_state['classification_result'] = {
                         'predicted_class': predicted_class,
                         'confidence': confidence,
                         'prediction_label': prediction,
-                        'features_used': features.copy()  # Store features used for this classification
+                        'features_used': features.copy(),  # Store features used for this classification
+                        'image_hashes': classification_image_hash  # PERBAIKAN: Simpan hash gambar
                     }
                     
                 except Exception as e:
@@ -1043,6 +1075,13 @@ def Detection():
         st.sidebar.write(f"OD Hash: {st.session_state.get('current_od_image_hash', 'None')}")
         st.sidebar.write(f"Vessel Hash: {st.session_state.get('current_vessel_image_hash', 'None')}")
         st.sidebar.write(f"Features Count: {len(st.session_state.get('extracted_features', {}))}")
+        
+        # PERBAIKAN: Tampilkan hash yang digunakan untuk klasifikasi
+        if st.session_state.get('classification_result') and 'image_hashes' in st.session_state['classification_result']:
+            class_hashes = st.session_state['classification_result']['image_hashes']
+            st.sidebar.write("**Classification Image Hashes:**")
+            st.sidebar.write(f"OD: {class_hashes.get('od_hash', 'None')}")
+            st.sidebar.write(f"Vessel: {class_hashes.get('vessel_hash', 'None')}")
 
 # ===================== PAGE ROUTING ===================== #
 
