@@ -947,6 +947,19 @@ def Detection():
         st.header("⚙️ Step 4: CLASSIFICATION")
         st.markdown("Classify glaucoma severity based on extracted features using trained SVM model.")
     
+        # --- Tambahkan kode debug berikut di sini ---
+        model, scaler, selected_features = load_svm_classifier()
+        extracted = st.session_state['extracted_features']
+    
+        missing = set(selected_features) - set(extracted.keys())
+        extra = set(extracted.keys()) - set(selected_features)
+        st.subheader("🔎 Debug: Feature Key Check")
+        st.write("Extracted feature keys:", list(extracted.keys()))
+        st.write("Model required features:", selected_features)
+        st.write("Missing features:", missing)
+        st.write("Extra features (tidak dipakai model):", extra)
+        # --- Debug sampai sini ---
+    
         if st.button("🧠 Run Classification", key="run_classification"):
             with st.spinner("Running SVM classification..."):
                 # Load model, scaler, and feature names
