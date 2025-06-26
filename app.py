@@ -939,31 +939,92 @@ def Detection():
                         # Get extracted features
                         features = st.session_state['extracted_features']
                         
-                        # Top 34 features (adjust based on your actual feature selection)
-                        top_34_features = [
-                            'cdr_vertical','cup_equiv_diameter','cup_perimeter','cup_minor_axis','disc_extent',
-                            'disc_solidity','cup_area','cup_major_axis','disc_perimeter',
-                            'cdr_diameter','disc_area','disc_major_axis','disc_equiv_diameter',
-                            'cdr_area','disc_minor_axis','cup_solidity','Vessel_Density',
-                            'Vessel_Area','mean_energy_vessel', 'Vessel_Length','mean_contrast_vessel','mean_homogeneity_vessel',
-                            'Number_of_segments','mean_correlation_vessel','Bifurcation_Points','mean_correlation_cdr',
-                            'disc_eccentricity','mean_homogeneity_cdr','Std_Dev_TC','cup_eccentricity',
-                            'Mean_Tortuosity','mean_contrast_cdr','cup_extent','mean_energy_cdr'
+                        # ✅ CORRECT: Using the EXACT same feature order as in training
+                        # This is the exact order from your PCC ranking and model training
+                        top_34_features_correct_order = [
+                            'cdr_vertical', 'cup_equiv_diameter', 'cup_perimeter', 'cup_minor_axis', 'disc_extent', 
+                            'disc_solidity', 'cup_area', 'cup_major_axis', 'disc_perimeter', 'cdr_diameter', 
+                            'disc_area', 'disc_major_axis', 'disc_equiv_diameter', 'cdr_area', 'disc_minor_axis', 
+                            'cup_solidity', 'Vessel_Density', 'Vessel_Area', 'mean_energy_vessel', 'Vessel_Length', 
+                            'mean_contrast_vessel', 'mean_homogeneity_vessel', 'Number of segments', 'mean_correlation_vessel', 
+                            'Bifurcation Point', 'mean_correlation_cdr', 'disc_eccentricity', 'mean_homogeneity_cdr', 
+                            'Std Dev TC', 'cup_eccentricity', 'Mean Tortuosity', 'mean_contrast_cdr', 'cup_extent', 'mean_energy_cdr'
                         ]
                         
-                        # Prepare feature vector with better handling of missing features
-                        feature_vector = []
-                        missing_features = []
+                        # Map extracted feature names to training feature names
+                        feature_name_mapping = {
+                            # Your extraction → Training CSV name
+                            'Number_of_segments': 'Number of segments',
+                            'Bifurcation_Points': 'Bifurcation Point', 
+                            'Std_Dev_TC': 'Std Dev TC',
+                            'Mean_Tortuosity': 'Mean Tortuosity'
+                        }
                         
-                        for feature_name in top_34_features:
-                            if feature_name in features:
-                                feature_vector.append(features[feature_name])
-                            else:
-                                feature_vector.append(0)  # Default for missing features
-                                missing_features.append(feature_name)
+                        st.success("✅ Using CORRECT feature order from training!")
+                        st.info("Feature order and names now match the trained model exactly.")
+                        
+                        top_34_features = top_34_features_correct_order
+                        
+                        # Debug: Show available vs expected features
+                        st.write("🔍 DEBUG INFO:")
+                        available_features = set(features.keys())
+                        expected_features = set(top_34_features)
+                        
+                        col_debug1, col_debug2 = st.columns(2)
+                        with col_debug1:
+                            st.write("**Available Features:**", len(available_features))
+                            st.write(list(available_features)[:10], "...")
+                        with col_debug2:
+                            st.write("**Expected Features:**", len(expected_features))
+                            st.write(top_34_features[:10], "...")
+                        
+                        # Check feature matching
+                        missing_features = expected_features - available_features
+                        extra_features = available_features - expected_features
                         
                         if missing_features:
-                            st.warning(f"Missing features (filled with 0): {', '.join(missing_features[:5])}{'...' if len(missing_features) > 5 else ''}")
+                            st.error(f"❌ Missing {len(missing_features)} features: {list(missing_features)[:5]}...")
+                        if extra_features:
+                            st.warning(f"⚠️ Extra {len(extra_features)} features found: {list(extra_features)[:5]}...")
+                        
+                        # Prepare feature vector with correct name mapping
+                        feature_vector = []
+                        feature_mapping = {}
+                        missing_features = []
+                        
+                        for i, training_feature_name in enumerate(top_34_features):
+                            value = 0  # Default value
+                            found = False
+                            
+                            # Direct lookup first
+                            if training_feature_name in features:
+                                value = features[training_feature_name]
+                                found = True
+                            else:
+                                # Check with name mapping
+                                for extracted_name, extracted_value in features.items():
+                                    if training_feature_name == 'Number of segments' and extracted_name == 'Number_of_segments':
+                                        value = extracted_value
+                                        found = True
+                                        break
+                                    elif training_feature_name == 'Bifurcation Point' and extracted_name == 'Bifurcation_Points':
+                                        value = extracted_value
+                                        found = True
+                                        break
+                                    elif training_feature_name == 'Std Dev TC' and extracted_name == 'Std_Dev_TC':
+                                        value = extracted_value
+                                        found = True
+                                        break
+                                    elif training_feature_name == 'Mean Tortuosity' and extracted_name == 'Mean_Tortuosity':
+                                        value = extracted_value
+                                        found = True
+                                        break
+                            
+                            feature_vector.append(value)
+                            feature_mapping[f"F{i:02d}_{training_feature_name}"] = value
+                            
+                            if not found:
+                                missing_features.append(training_feature_name)
                         
                         # Convert to numpy array and reshape for prediction
                         feature_array = np.array(feature_vector).reshape(1, -1)
@@ -990,7 +1051,13 @@ def Detection():
                             'predicted_class': predicted_class,
                             'confidence': confidence,
                             'prediction_label': prediction,
-                            'all_probabilities': prediction_proba
+                            'all_probabilities': prediction_proba,
+                            'debug_info': {
+                                'feature_vector': feature_vector,
+                                'feature_mapping': feature_mapping,
+                                'missing_features': list(missing_features),
+                                'key_features': key_features
+                            }
                         }
                         
                         st.success("✅ Classification completed successfully!")
