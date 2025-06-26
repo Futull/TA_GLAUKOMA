@@ -846,10 +846,13 @@ def Detection():
             if st.button("🟢 CLASSIFY GLAUCOMA SEVERITY", key="classify", type="primary", use_container_width=True):
                 try:
                     # Load the trained SVM model
-                    import pickle
                     
-                    with open('models/final_svm_model_rbf.pkl', 'rb') as f:
+                    with open('models/rill_final_svm_model_rbf.pkl', 'rb') as f:
                         svm_model = pickle.load(f)
+
+                    #Load Scaler
+                    with open('models/final_scaler.pkl', 'rb') as f:
+                    scaler = pickle.load(f)
                     
                     # Get extracted features
                     features = st.session_state['extracted_features']
@@ -876,11 +879,14 @@ def Detection():
                     
                     # Convert to numpy array and reshape for prediction
                     feature_array = np.array(feature_vector).reshape(1, -1)
+
+                    # Apply scaling before prediction
+                    feature_scaled = scaler.transform(feature_array)
                     
                     # Make prediction directly with SVM model (no scaling needed)
-                    prediction = svm_model.predict(feature_array)[0]
-                    prediction_proba = svm_model.predict_proba(feature_array)[0]
-                    
+                    prediction = svm_model.predict(feature_scaled)[0]
+                    prediction_proba = svm_model.predict_proba(feature_scaled)[0]
+
                     # Map to severity levels
                     severity_mapping = {0: "Normal", 1: "Mild Glaucoma", 2: "Moderate Glaucoma", 3: "Severe Glaucoma"}
                     colors = ["🟢", "🟡", "🟠", "🔴"]
@@ -920,7 +926,7 @@ def Detection():
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
-            
+
             with col2:
                 # Severity levels reference
                 st.markdown("### 📊 Severity Levels")
