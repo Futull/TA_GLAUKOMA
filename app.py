@@ -559,11 +559,11 @@ def extract_vessel_area_density_features(vessel_mask):
 @st.cache_resource
 def load_svm_classifier():
     """Load trained SVM model, scaler, and top-34 feature list"""
-    with open("models/final_svm_model_rbf.pkl", "rb") as f:
+    with open("models/final_svm_model.pkl", "rb") as f:
         model = pickle.load(f)
     with open("models/final_scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
-    with open("models/top34_features.pkl", "rb") as f:
+    with open("models/final_top34_features.pkl", "rb") as f:
         selected_features = pickle.load(f)
     return model, scaler, selected_features
 
