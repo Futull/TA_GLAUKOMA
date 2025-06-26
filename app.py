@@ -4,7 +4,7 @@ import os
 from skimage.measure import label, regionprops  
 from skimage.morphology import disk, opening, closing, remove_small_objects, remove_small_holes, skeletonize
 from skimage.filters import gaussian
-from skimage.util import img_as_ubyte 
+from skimage.util import img_as_ubyte
 from skimage.feature import graycomatrix, graycoprops
 import cv2
 import numpy as np 
@@ -50,48 +50,6 @@ def Cover():
         "- Follow the sequential steps: Preprocessing → Segmentation → Feature Extraction → Classification\n"
         "- Upload your fundus images to begin the detection process\n"
     )
-
-# ===================== UTILITY FUNCTIONS ===================== #
-
-def reset_downstream_states(from_step):
-    """Reset states of downstream steps when upstream changes"""
-    steps_hierarchy = ['preprocessing', 'segmentation', 'extraction', 'classification']
-    
-    reset_index = steps_hierarchy.index(from_step)
-    
-    # Reset all downstream steps
-    for i in range(reset_index + 1, len(steps_hierarchy)):
-        step = steps_hierarchy[i]
-        if step == 'segmentation':
-            st.session_state['segmentation_map_od'] = None
-            st.session_state['colored_segmentation_od'] = None
-            st.session_state['segmentation_completed_od'] = False
-            st.session_state['vessel_mask'] = None
-            st.session_state['segmentation_completed_vessel'] = False
-            st.session_state.step_completed['segmentation'] = False
-        elif step == 'extraction':
-            st.session_state['extracted_features'] = None
-            st.session_state.step_completed['extraction'] = False
-        elif step == 'classification':
-            st.session_state['classification_result'] = None
-
-def check_image_change(uploaded_file, session_key):
-    """Check if uploaded image has changed"""
-    if uploaded_file is None:
-        return False
-    
-    # Create a simple hash of the uploaded file
-    file_hash = hash(uploaded_file.getvalue())
-    
-    if session_key not in st.session_state:
-        st.session_state[session_key] = file_hash
-        return True
-    
-    if st.session_state[session_key] != file_hash:
-        st.session_state[session_key] = file_hash
-        return True
-    
-    return False
 
 # ===================== PREPROCESSING FUNCTIONS ===================== #
 
@@ -449,17 +407,17 @@ def extract_tortuosity_features(vessel_mask):
 
     if len(tortuosity_list) == 0:
         return {
-            "Mean_Tortuosity": 0,
-            "Median_Tortuosity": 0,
-            "Std_Dev_TC": 0,
-            "Number_of_segments": 0
+            "Mean Tortuosity": 0,
+            "Median Tortuosity": 0,
+            "Std Dev TC": 0,
+            "Number of segments": 0
         }
     
     return {
-        "Mean_Tortuosity": round(np.mean(tortuosity_list), 4),
-        "Median_Tortuosity": round(np.median(tortuosity_list), 4),
-        "Std_Dev_TC": round(np.std(tortuosity_list), 4),
-        "Number_of_segments": len(tortuosity_list)
+        "Mean Tortuosity": round(np.mean(tortuosity_list), 4),
+        "Median Tortuosity": round(np.median(tortuosity_list), 4),
+        "Std Dev TC": round(np.std(tortuosity_list), 4),
+        "Number of segments": len(tortuosity_list)
     }
 
 def get_direction_vectors(y, x, img):
@@ -498,7 +456,7 @@ def extract_bifurcation_features(vessel_mask):
                     if max(angles) - min(angles) > 40:
                         bif_points.append((x, y))
 
-    return {"Bifurcation_Points": len(bif_points)}
+    return {"Bifurcation Points": len(bif_points)}
 
 def compute_vessel_length(skel):
     coords = np.column_stack(np.where(skel > 0))
@@ -527,10 +485,10 @@ def extract_vessel_length_features(vessel_mask):
     return {"Vessel_Length": round(vessel_length, 2)}
 
 def compute_vessel_area_and_density(mask):
-    vessel_area = np.sum(mask > 0)
+    Vessel_Area = np.sum(mask > 0)
     total_area = mask.shape[0] * mask.shape[1]
-    vessel_density = vessel_area / total_area
-    return int(vessel_area), round(vessel_density, 6)
+    Vessel_Density = Vessel_Area / total_area
+    return int(Vessel_Area), round(Vessel_Density, 6)
 
 def extract_vessel_area_density_features(vessel_mask):
     """Extract vessel area and density features"""
@@ -555,8 +513,7 @@ def Detection():
         'preprocessing_results_od', 'preprocessed_image_od', 'original_image_od',
         'preprocessing_results_vessel', 'preprocessed_image_vessel', 'original_image_vessel',
         'segmentation_map_od', 'colored_segmentation_od', 'segmentation_completed_od',
-        'vessel_mask', 'segmentation_completed_vessel', 'extracted_features', 'classification_result',
-        'od_image_hash', 'vessel_image_hash'  # Add image hash tracking
+        'vessel_mask', 'segmentation_completed_vessel', 'extracted_features', 'classification_result'
     ]
     
     for key in state_keys:
@@ -576,15 +533,6 @@ def Detection():
         uploaded_file_od = st.file_uploader("Upload Cropped ONH Image", type=["png", "jpg", "jpeg"], key="od_oc_upload")
         
         if uploaded_file_od:
-            # Check if image has changed
-            if check_image_change(uploaded_file_od, 'od_image_hash'):
-                # Reset all downstream processing when new image is uploaded
-                reset_downstream_states('preprocessing')
-                st.session_state['preprocessing_results_od'] = None
-                st.session_state['preprocessed_image_od'] = None
-                st.session_state['original_image_od'] = None
-                st.session_state.step_completed['preprocessing'] = False
-            
             image_od = Image.open(uploaded_file_od).convert('RGB')
             img_np_od = np.array(image_od)
             st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
@@ -596,11 +544,7 @@ def Detection():
                     st.session_state['preprocessed_image_od'] = results['step6_final']
                     st.session_state['original_image_od'] = img_np_od
                     st.session_state.step_completed['preprocessing'] = True
-                    
-                    # Reset downstream processes when preprocessing is done
-                    reset_downstream_states('preprocessing')
                     st.success("✅ OD/OC preprocessing completed!")
-                    st.rerun()  # Force rerun to update UI
         
         # Always show results if they exist in session state
         if st.session_state['preprocessing_results_od'] is not None:
@@ -633,15 +577,6 @@ def Detection():
         uploaded_file_vessel = st.file_uploader("Upload Full Fundus Image", type=["png", "jpg", "jpeg"], key="vessel_upload")
         
         if uploaded_file_vessel:
-            # Check if image has changed
-            if check_image_change(uploaded_file_vessel, 'vessel_image_hash'):
-                # Reset all downstream processing when new image is uploaded
-                reset_downstream_states('preprocessing')
-                st.session_state['preprocessing_results_vessel'] = None
-                st.session_state['preprocessed_image_vessel'] = None
-                st.session_state['original_image_vessel'] = None
-                st.session_state.step_completed['preprocessing'] = False
-            
             image_vessel = Image.open(uploaded_file_vessel).convert('RGB')
             img_np_vessel = np.array(image_vessel)
             st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
@@ -653,11 +588,7 @@ def Detection():
                     st.session_state['preprocessed_image_vessel'] = results['step5_final']
                     st.session_state['original_image_vessel'] = img_np_vessel
                     st.session_state.step_completed['preprocessing'] = True
-                    
-                    # Reset downstream processes when preprocessing is done
-                    reset_downstream_states('preprocessing')
                     st.success("✅ Vessel preprocessing completed!")
-                    st.rerun()  # Force rerun to update UI
         
         # Always show results if they exist in session state
         if st.session_state['preprocessing_results_vessel'] is not None:
@@ -734,14 +665,10 @@ def Detection():
                             st.session_state['segmentation_completed_od'] = True
                             st.session_state.step_completed['segmentation'] = True
                             
-                            # Reset downstream processes when segmentation is done
-                            reset_downstream_states('segmentation')
-                            
                             with col2:
                                 st.image(colored_result, caption="OD/OC Segmentation")
                             
                             st.success("✅ OD/OC segmentation completed!")
-                            st.rerun()  # Force rerun to update UI
         
         # Vessel Segmentation
         if has_vessel_preprocessing:
@@ -776,14 +703,10 @@ def Detection():
                             st.session_state['segmentation_completed_vessel'] = True
                             st.session_state.step_completed['segmentation'] = True
                             
-                            # Reset downstream processes when segmentation is done
-                            reset_downstream_states('segmentation')
-                            
                             with col2:
                                 st.image(vessel_mask, caption="Vessel Segmentation")
                             
                             st.success("✅ Vessel segmentation completed!")
-                            st.rerun()  # Force rerun to update UI
         
         st.markdown("---")
     
@@ -881,11 +804,7 @@ def Detection():
                     st.session_state['extracted_features'] = extracted_features
                     st.session_state.step_completed['extraction'] = True
                     
-                    # Reset classification when features are re-extracted
-                    reset_downstream_states('extraction')
-                    
                     st.success("✅ Feature extraction completed!")
-                    st.rerun()  # Force rerun to update UI
         
         # Display extracted features table if available
         if st.session_state['extracted_features'] is not None:
@@ -923,151 +842,64 @@ def Detection():
             if st.session_state['classification_result'] is not None:
                 st.success("✅ Classification already completed!")
                 st.info("Results are displayed below.")
-                st.warning("⚠️ Re-run classification if you want to update results with new features.")
             
             if st.button("🟢 CLASSIFY GLAUCOMA SEVERITY", key="classify", type="primary", use_container_width=True):
                 try:
-                    with st.spinner("Running SVM classification..."):
-                        # Load the trained SVM model
-                        with open('models/rill_final_svm_model_rbf.pkl', 'rb') as f:
-                            svm_model = pickle.load(f)
+                    # Load the trained SVM model
+                    
+                    with open('models/rill_final_svm_model_rbf.pkl', 'rb') as f:
+                        svm_model = pickle.load(f)
 
-                        #Load Scaler
-                        with open('models/final_scaler.pkl', 'rb') as f:
-                            scaler = pickle.load(f)
-                        
-                        # Get extracted features
-                        features = st.session_state['extracted_features']
-                        
-                        # ✅ CORRECT: Using the EXACT same feature order as in training
-                        # This is the exact order from your PCC ranking and model training
-                        top_34_features_correct_order = [
-                            'cdr_vertical', 'cup_equiv_diameter', 'cup_perimeter', 'cup_minor_axis', 'disc_extent', 
-                            'disc_solidity', 'cup_area', 'cup_major_axis', 'disc_perimeter', 'cdr_diameter', 
-                            'disc_area', 'disc_major_axis', 'disc_equiv_diameter', 'cdr_area', 'disc_minor_axis', 
-                            'cup_solidity', 'Vessel_Density', 'Vessel_Area', 'mean_energy_vessel', 'Vessel_Length', 
-                            'mean_contrast_vessel', 'mean_homogeneity_vessel', 'Number of segments', 'mean_correlation_vessel', 
-                            'Bifurcation Point', 'mean_correlation_cdr', 'disc_eccentricity', 'mean_homogeneity_cdr', 
-                            'Std Dev TC', 'cup_eccentricity', 'Mean Tortuosity', 'mean_contrast_cdr', 'cup_extent', 'mean_energy_cdr'
-                        ]
-                        
-                        # Map extracted feature names to training feature names
-                        feature_name_mapping = {
-                            # Your extraction → Training CSV name
-                            'Number_of_segments': 'Number of segments',
-                            'Bifurcation_Points': 'Bifurcation Point', 
-                            'Std_Dev_TC': 'Std Dev TC',
-                            'Mean_Tortuosity': 'Mean Tortuosity'
-                        }
-                        
-                        st.success("✅ Using CORRECT feature order from training!")
-                        st.info("Feature order and names now match the trained model exactly.")
-                        
-                        top_34_features = top_34_features_correct_order
-                        
-                        # Debug: Show available vs expected features
-                        st.write("🔍 DEBUG INFO:")
-                        available_features = set(features.keys())
-                        expected_features = set(top_34_features)
-                        
-                        col_debug1, col_debug2 = st.columns(2)
-                        with col_debug1:
-                            st.write("**Available Features:**", len(available_features))
-                            st.write(list(available_features)[:10], "...")
-                        with col_debug2:
-                            st.write("**Expected Features:**", len(expected_features))
-                            st.write(top_34_features[:10], "...")
-                        
-                        # Check feature matching
-                        missing_features = expected_features - available_features
-                        extra_features = available_features - expected_features
-                        
-                        if missing_features:
-                            st.error(f"❌ Missing {len(missing_features)} features: {list(missing_features)[:5]}...")
-                        if extra_features:
-                            st.warning(f"⚠️ Extra {len(extra_features)} features found: {list(extra_features)[:5]}...")
-                        
-                        # Prepare feature vector with correct name mapping
-                        feature_vector = []
-                        feature_mapping = {}
-                        missing_features = []
-                        
-                        for i, training_feature_name in enumerate(top_34_features):
-                            value = 0  # Default value
-                            found = False
-                            
-                            # Direct lookup first
-                            if training_feature_name in features:
-                                value = features[training_feature_name]
-                                found = True
-                            else:
-                                # Check with name mapping
-                                for extracted_name, extracted_value in features.items():
-                                    if training_feature_name == 'Number of segments' and extracted_name == 'Number_of_segments':
-                                        value = extracted_value
-                                        found = True
-                                        break
-                                    elif training_feature_name == 'Bifurcation Point' and extracted_name == 'Bifurcation_Points':
-                                        value = extracted_value
-                                        found = True
-                                        break
-                                    elif training_feature_name == 'Std Dev TC' and extracted_name == 'Std_Dev_TC':
-                                        value = extracted_value
-                                        found = True
-                                        break
-                                    elif training_feature_name == 'Mean Tortuosity' and extracted_name == 'Mean_Tortuosity':
-                                        value = extracted_value
-                                        found = True
-                                        break
-                            
-                            feature_vector.append(value)
-                            feature_mapping[f"F{i:02d}_{training_feature_name}"] = value
-                            
-                            if not found:
-                                missing_features.append(training_feature_name)
-                        
-                        # Convert to numpy array and reshape for prediction
-                        feature_array = np.array(feature_vector).reshape(1, -1)
+                    #Load Scaler
+                    with open('models/final_scaler.pkl', 'rb') as f:
+                        scaler = pickle.load(f)  # ← 4 spasi indentasi
+                    
+                    # Get extracted features
+                    features = st.session_state['extracted_features']
+                    
+                    # Top 34 features (adjust based on your actual feature selection)
+                    top_34_features = [
+                        'cdr_vertical', 'cup_equiv_diameter', 'cup_perimeter', 'cup_minor_axis', 'disc_extent', 'disc_solidity', 'cup_area', 'cup_major_axis', 'disc_perimeter', 'cdr_diameter', 'disc_area', 'disc_major_axis', 'disc_equiv_diameter', 'cdr_area', 'disc_minor_axis', 'cup_solidity', 'Vessel_Density', 'Vessel_Area', 'mean_energy_vessel', 'Vessel_Length', 'mean_contrast_vessel', 'mean_homogeneity_vessel', 'Number of segments', 'mean_correlation_vessel', 'Bifurcation Point', 'mean_correlation_cdr', 'disc_eccentricity', 'mean_homogeneity_cdr', 'Std Dev TC', 'cup_eccentricity', 'Mean Tortuosity', 'mean_contrast_cdr', 'cup_extent', 'mean_energy_cdr'
+                    ]
+                    
+                    # Prepare feature vector
+                    feature_vector = []
+                    for feature_name in top_34_features:
+                        if feature_name in features:
+                            feature_vector.append(features[feature_name])
+                        else:
+                            feature_vector.append(0)  # Default for missing features
+                    
+                    # Convert to numpy array and reshape for prediction
+                    feature_array = np.array(feature_vector).reshape(1, -1)
 
-                        # Apply scaling before prediction
-                        feature_scaled = scaler.transform(feature_array)
-                        
-                        # Make prediction with SVM model
-                        prediction = svm_model.predict(feature_scaled)[0]
-                        prediction_proba = svm_model.predict_proba(feature_scaled)[0]
+                    # Apply scaling before prediction
+                    feature_scaled = scaler.transform(feature_array)
+                    
+                    # Make prediction directly with SVM model (no scaling needed)
+                    prediction = svm_model.predict(feature_scaled)[0]
+                    prediction_proba = svm_model.predict_proba(feature_scaled)[0]
 
-                        # Map to severity levels
-                        severity_mapping = {0: "Normal", 1: "Mild Glaucoma", 2: "Moderate Glaucoma", 3: "Severe Glaucoma"}
-                        colors = ["🟢", "🟡", "🟠", "🔴"]
-                        bg_colors = ["#d4edda", "#fff3cd", "#f8d7da", "#f5c6cb"]
-                        
-                        predicted_class = severity_mapping[prediction]
-                        confidence = prediction_proba[prediction] * 100
-                        color_emoji = colors[prediction]
-                        bg_color = bg_colors[prediction]
-                        
-                        # Save result (this will overwrite previous results)
-                        st.session_state['classification_result'] = {
-                            'predicted_class': predicted_class,
-                            'confidence': confidence,
-                            'prediction_label': prediction,
-                            'all_probabilities': prediction_proba,
-                            'debug_info': {
-                                'feature_vector': feature_vector,
-                                'feature_mapping': feature_mapping,
-                                'missing_features': list(missing_features),
-                                'key_features': key_features
-                            }
-                        }
-                        
-                        st.success("✅ Classification completed successfully!")
-                        st.rerun()  # Force rerun to show results immediately
-                        
+                    # Map to severity levels
+                    severity_mapping = {0: "Normal", 1: "Mild Glaucoma", 2: "Moderate Glaucoma", 3: "Severe Glaucoma"}
+                    colors = ["🟢", "🟡", "🟠", "🔴"]
+                    bg_colors = ["#d4edda", "#fff3cd", "#f8d7da", "#f5c6cb"]
+                    
+                    predicted_class = severity_mapping[prediction]
+                    confidence = prediction_proba[prediction] * 100
+                    color_emoji = colors[prediction]
+                    bg_color = bg_colors[prediction]
+                    
+                    # Save result
+                    st.session_state['classification_result'] = {
+                        'predicted_class': predicted_class,
+                        'confidence': confidence,
+                        'prediction_label': prediction
+                    }
+                    
                 except Exception as e:
-                    st.error(f"❌ Classification Error: {str(e)}")
-                    st.info("Please ensure the SVM model and scaler files exist in 'models/' folder")
-                    # Clear any incomplete results
-                    st.session_state['classification_result'] = None
+                    st.error(f"❌ Error: {str(e)}")
+                    st.info("Please ensure the SVM model file exists in 'models/' folder")
         
         # Display results if classification is done
         if st.session_state['classification_result'] is not None:
@@ -1087,15 +919,6 @@ def Detection():
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Show all probabilities for transparency
-                if 'all_probabilities' in result:
-                    st.subheader("📊 Classification Probabilities")
-                    prob_data = {
-                        'Severity Level': ['Normal', 'Mild Glaucoma', 'Moderate Glaucoma', 'Severe Glaucoma'],
-                        'Probability (%)': [f"{prob*100:.1f}%" for prob in result['all_probabilities']]
-                    }
-                    st.dataframe(pd.DataFrame(prob_data), use_container_width=True, hide_index=True)
 
             with col2:
                 # Severity levels reference
@@ -1130,18 +953,6 @@ def Detection():
             st.sidebar.markdown(f"✅ {step}")
         else:
             st.sidebar.markdown(f"⏳ {step}")
-    
-    # Add debug info in sidebar for development
-    if st.sidebar.checkbox("🔧 Show Debug Info"):
-        st.sidebar.subheader("Debug Information")
-        st.sidebar.write("OD Image Hash:", st.session_state.get('od_image_hash', 'None'))
-        st.sidebar.write("Vessel Image Hash:", st.session_state.get('vessel_image_hash', 'None'))
-        st.sidebar.write("Has OD Preprocessing:", st.session_state['preprocessed_image_od'] is not None)
-        st.sidebar.write("Has Vessel Preprocessing:", st.session_state['preprocessed_image_vessel'] is not None)
-        st.sidebar.write("Has OD Segmentation:", st.session_state['segmentation_completed_od'])
-        st.sidebar.write("Has Vessel Segmentation:", st.session_state['segmentation_completed_vessel'])
-        st.sidebar.write("Has Features:", st.session_state['extracted_features'] is not None)
-        st.sidebar.write("Has Classification:", st.session_state['classification_result'] is not None)
 
 # ===================== PAGE ROUTING ===================== #
 
