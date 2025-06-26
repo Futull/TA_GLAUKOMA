@@ -852,7 +852,7 @@ def Detection():
 
                     #Load Scaler
                     with open('models/final_scaler.pkl', 'rb') as f:
-                    scaler = pickle.load(f)
+                        scaler = pickle.load(f)  # ← 4 spasi indentasi
                     
                     # Get extracted features
                     features = st.session_state['extracted_features']
