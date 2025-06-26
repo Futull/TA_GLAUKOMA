@@ -4,7 +4,7 @@ import os
 from skimage.measure import label, regionprops  
 from skimage.morphology import disk, opening, closing, remove_small_objects, remove_small_holes, skeletonize
 from skimage.filters import gaussian
-from skimage.util import img_as_ubyte
+from skimage.util import img_as_ubyte 
 from skimage.feature import graycomatrix, graycoprops
 import cv2
 import numpy as np 
