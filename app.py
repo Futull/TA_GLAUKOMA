@@ -2,14 +2,20 @@ import streamlit as st
 from PIL import Image 
 import os 
 from skimage.measure import label, regionprops  
-from skimage.morphology import disk, opening, closing 
+from skimage.morphology import disk, opening, closing, remove_small_objects, remove_small_holes, skeletonize
 from skimage.filters import gaussian
+from skimage.util import img_as_ubyte
+from skimage.feature import graycomatrix, graycoprops
 import cv2
 import numpy as np 
 import torch
 from torchvision import transforms
 import matplotlib.pyplot as plt
 from scipy import ndimage
+from scipy.spatial.distance import euclidean
+import pandas as pd
+import networkx as nx
+import math
 from model_architecture import Build_UNet  # OD/OC
 from vessel_architecture import Build_UNet_Vessel  # VESSEL
 
@@ -38,15 +44,13 @@ def Cover():
     st.markdown("### Dosen Pembimbing 2: Nada Fitrieyatul Hikmah, S.T., M.T")
 
     st.sidebar.info(
-        "Navigation Instructions:\n"
-        "- Go to *Preprocessing* to enhance image quality\n"
-        "- Go to *Segmentation* to choose between OD/OC or Vessel\n"
-        "- Go to *Feature Extraction* to analyze CDR, vessel tortuosity, etc.\n"
-        "- Use *Classification* to predict glaucoma severity\n"
+        "Application Guide:\n"
+        "- Go to *Detection* page to start the analysis\n"
+        "- Follow the sequential steps: Preprocessing → Segmentation → Feature Extraction → Classification\n"
+        "- Upload your fundus images to begin the detection process\n"
     )
 
 # ===================== PREPROCESSING FUNCTIONS ===================== #
-# ===================== PREPOS OD/OC FUNCTIONS ===================== #
 
 def resize_image(image, target_size=(256, 256)):
     """Resize image to target size"""
@@ -111,10 +115,7 @@ def apply_median_filter(image, ksize=3):
     
 # ===================== PIPELINE PREPOS OD/OC STEPS ===================== #
 def preprocess_od_oc_stepwise(image):
-    """
-    Apply step-by-step preprocessing for OD/OC segmentation
-    Returns a dictionary with all intermediate results
-    """
+    """Apply step-by-step preprocessing for OD/OC segmentation"""
     results = {}
     
     # Step 1: Resize to 256x256
@@ -145,10 +146,7 @@ def preprocess_od_oc_stepwise(image):
 
 # ===================== PIPELINE PREPOS VESSEL STEPS ===================== #
 def preprocess_vessel_stepwise(image):
-    """
-    Apply step-by-step preprocessing for vessel segmentation
-    Returns a dictionary with all intermediate results
-    """
+    """Apply step-by-step preprocessing for vessel segmentation"""
     results = {}
     
     # Step 1: Resize to 256x256
@@ -179,114 +177,8 @@ def preprocess_vessel_stepwise(image):
     
     return results
 
-# ===================== PREPROCESSING PAGE ===================== #
+# ===================== SEGMENTATION FUNCTIONS ===================== #
 
-def Preprocessing():
-    st.title("Preprocessing Steps")
-    
-    task = st.radio("Select Preprocessing Task", ["OD/OC Segmentation", "Vessel Segmentation"])
-    
-    if task == "OD/OC Segmentation":
-        st.subheader("OD/OC Segmentation Preprocessing")
-        uploaded_file_od = st.file_uploader("Upload Cropped ONH Image for OD/OC", type=["png", "jpg", "jpeg"], key="od_oc_upload")
-        
-        if uploaded_file_od:
-            image_od = Image.open(uploaded_file_od).convert('RGB')
-            img_np_od = np.array(image_od)
-            
-            st.subheader("Original Cropped Image")
-            st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
-            
-            if st.button("Apply OD/OC Preprocessing"):
-                with st.spinner("Processing..."):
-                    results = preprocess_od_oc_stepwise(img_np_od)
-                    
-                    st.session_state['preprocessing_results'] = results
-                    st.session_state['preprocessed_image'] = results['step6_final']
-                    
-                    # Display all steps in order
-                    st.subheader("OD/OC Preprocessing Pipeline Results")
-                    
-                    # Show 7 steps in columns
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        st.image(img_np_od, caption="Original Cropped")
-                    
-                    with col2:
-                        st.image(results['step1_resized'], caption="1.Resized 256 x 256")
-                    
-                    with col3:
-                        st.image(results['step2_sharpened'], caption="2.Sharpening")
-                    
-                    with col4:
-                        st.image(results['step3_color_norm'], caption="3.RGB Color Normalization")
-                    
-                    # Second row
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.image(results['step4_gamma'], caption="4.Gamma Correct")
-                    
-                    with col2:
-                        st.image(results['step5_clahe'], caption="5.CLAHE")
-                    
-                    with col3:
-                        st.image(results['step6_final'], caption="6.Median Filter")
-                    
-                    st.success("✅ OD/OC preprocessing completed!")
-        else:
-            st.warning("⚠ Please upload a cropped ONH image for OD/OC preprocessing.")
-            
-    elif task == "Vessel Segmentation":
-        st.subheader("Vessel Segmentation Preprocessing")
-        uploaded_file_vessel = st.file_uploader("Upload Full Fundus Image for Vessel", type=["png", "jpg", "jpeg"], key="vessel_upload")
-        
-        if uploaded_file_vessel:
-            image_vessel = Image.open(uploaded_file_vessel).convert('RGB')
-            img_np_vessel = np.array(image_vessel)
-            
-            st.subheader("Original Full Image")
-            st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
-            
-            if st.button("Apply Vessel Preprocessing"):
-                with st.spinner("Processing vessel segmentation..."):
-                    results = preprocess_vessel_stepwise(img_np_vessel)
-                    
-                    st.session_state['vessel_preprocessed'] = results['step5_final']
-                    st.session_state['vessel_results'] = results
-                    
-                    # Display all steps in order
-                    st.subheader("Vessel Preprocessing Pipeline Results")
-                    
-                    # Show 6 steps in 3 columns x 2 rows
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.image(img_np_vessel, caption="Original Image")
-                    
-                    with col2:
-                        st.image(results['step1_resized'], caption="1.Resized 256 x 256")
-                    
-                    with col3:
-                        st.image(results['step2_green'], caption="2.Green Channel")
-                    
-                    # Second row
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.image(results['step3_gamma'], caption="3.Gamma Correct")
-                    
-                    with col2:
-                        st.image(results['step4_clahe'], caption="4.CLAHE")
-                    
-                    with col3:
-                        st.image(results['step5_final'], caption="5.Median Filter")
-                    
-                    st.success("✅ Vessel preprocessing completed!")
-        else:
-            st.warning("⚠ Please upload a full fundus image for vessel preprocessing.")
-# ===================== SEGMENTATION ===================== #
 def load_od_oc_model():
     """Load OD/OC segmentation model"""
     try:
@@ -357,160 +249,631 @@ def predict_vessel(model, image):
     
     return prediction
 
-# ===================== SEGMENTATION PAGE ===================== #
+# ===================== FEATURE EXTRACTION FUNCTIONS ===================== #
 
-def Segmentation():
-    st.title("Segmentation")
+# OD/OC Feature Extraction Functions
+def get_largest_region(mask):
+    labeled = label(mask)
+    props = regionprops(labeled)
+    if len(props) == 0:
+        return np.zeros_like(mask)
+    largest = max(props, key=lambda x: x.area)
+    return (labeled == largest.label).astype(np.uint8)
+
+def postprocess_mask(mask, disc_min=500, cup_min=200):
+    disc = (mask == 1).astype(np.uint8)
+    cup  = (mask == 2).astype(np.uint8)
+
+    disc = remove_small_objects(disc.astype(bool), min_size=disc_min)
+    disc = remove_small_holes(disc, area_threshold=200)
+    disc = get_largest_region(disc.astype(np.uint8))
+
+    cup = remove_small_objects(cup.astype(bool), min_size=cup_min)
+    cup = remove_small_holes(cup, area_threshold=100)
+    cup = get_largest_region(cup.astype(np.uint8))
+
+    final = np.zeros_like(mask, dtype=np.uint8)
+    final[disc == 1] = 1
+    final[cup == 1] = 2
+    return final, disc, cup
+
+def extract_od_oc_features(mask):
+    """Extract features from OD/OC segmentation mask"""
+    final_mask, disc_mask, cup_mask = postprocess_mask(mask)
+    disc_props = regionprops(label(disc_mask))
+    cup_props = regionprops(label(cup_mask))
+
+    if not disc_props or not cup_props:
+        return None
+
+    disc = disc_props[0]
+    cup = cup_props[0]
+
+    # CDR calculations
+    h_cup = cup.bbox[2] - cup.bbox[0]
+    h_disc = disc.bbox[2] - disc.bbox[0]
+    cdr_vertical = h_cup / (h_disc + 1e-8)
+    cdr_area = cup.area / (disc.area + 1e-8)
+    cdr_diameter = cup.major_axis_length / (disc.major_axis_length + 1e-8)
+
+    return {
+        "cdr_vertical": round(cdr_vertical, 4),
+        "cdr_area": round(cdr_area, 4),
+        "cdr_diameter": round(cdr_diameter, 4),
+        "cup_area": cup.area,
+        "cup_perimeter": cup.perimeter,
+        "cup_eccentricity": round(cup.eccentricity, 4),
+        "cup_major_axis": round(cup.major_axis_length, 2),
+        "cup_minor_axis": round(cup.minor_axis_length, 2),
+        "cup_extent": round(cup.extent, 4),
+        "cup_solidity": round(cup.solidity, 4),
+        "cup_equiv_diameter": round(cup.equivalent_diameter, 2),
+        "disc_area": disc.area,
+        "disc_perimeter": disc.perimeter,
+        "disc_eccentricity": round(disc.eccentricity, 4),
+        "disc_major_axis": round(disc.major_axis_length, 2),
+        "disc_minor_axis": round(disc.minor_axis_length, 2),
+        "disc_extent": round(disc.extent, 4),
+        "disc_solidity": round(disc.solidity, 4),
+        "disc_equiv_diameter": round(disc.equivalent_diameter, 2),
+    }
+
+def extract_glcm_features(image, levels=32):
+    """Extract GLCM features from preprocessed image"""
+    green = image[:, :, 1]  # Green channel
+    image_ubyte = img_as_ubyte(green)
+    image_quantized = np.clip((image_ubyte / (256 // levels)).astype(np.uint8), 0, levels - 1)
+
+    angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+    glcm = graycomatrix(image_quantized, distances=[1], angles=angles,
+                        levels=levels, symmetric=True, normed=True)
+
+    props = ['contrast', 'correlation', 'energy', 'homogeneity']
+    features = {}
+
+    for prop in props:
+        values = graycoprops(glcm, prop)[0]
+        features[f"mean_{prop}"] = np.mean(values)
+
+    return features
+
+# Vessel Feature Extraction Functions
+def find_endpoints(skel):
+    kernel = np.array([[1,1,1], [1,10,1], [1,1,1]], dtype=np.uint8)
+    conv = cv2.filter2D(skel.astype(np.uint8), -1, kernel)
+    y, x = np.where(conv == 11)
+    return list(zip(y, x))
+
+def find_branch_points(skel):
+    kernel = np.array([[1,1,1], [1,10,1], [1,1,1]], dtype=np.uint8)
+    conv = cv2.filter2D(skel.astype(np.uint8), -1, kernel)
+    y, x = np.where(conv >= 13)
+    return list(zip(y, x))
+
+def build_graph(skel):
+    G = nx.Graph()
+    h, w = skel.shape
+    for y in range(h):
+        for x in range(w):
+            if skel[y, x]:
+                for dy in [-1, 0, 1]:
+                    for dx in [-1, 0, 1]:
+                        ny, nx_ = y + dy, x + dx
+                        if (dy != 0 or dx != 0) and 0 <= ny < h and 0 <= nx_ < w:
+                            if skel[ny, nx_]:
+                                G.add_edge((y, x), (ny, nx_))
+    return G
+
+def extract_tortuosity_features(vessel_mask):
+    """Extract tortuosity features from vessel mask"""
+    skeleton = skeletonize(vessel_mask > 0).astype(np.uint8)
+    G = build_graph(skeleton)
+    endpoints = [n for n in G.nodes if G.degree[n] == 1]
+    branches = [n for n in G.nodes if G.degree[n] >= 3]
+    important_points = set(endpoints + branches)
+
+    visited = set()
+    segments = []
+    for node in important_points:
+        neighbors = list(G.neighbors(node))
+        for neighbor in neighbors:
+            if (node, neighbor) in visited or (neighbor, node) in visited:
+                continue
+            path = [node, neighbor]
+            current = neighbor
+            prev = node
+            while current not in important_points:
+                next_nodes = list(G.neighbors(current))
+                if prev in next_nodes:
+                    next_nodes.remove(prev)
+                if not next_nodes:
+                    break
+                prev, current = current, next_nodes[0]
+                path.append(current)
+            if len(path) > 2:
+                segments.append(path)
+                for i in range(len(path) - 1):
+                    visited.add((path[i], path[i+1]))
+
+    tortuosity_list = []
+    for seg in segments:
+        s_length = sum(euclidean(seg[i], seg[i+1]) for i in range(len(seg) - 1))
+        s_straight = euclidean(seg[0], seg[-1])
+        if s_straight > 0:
+            TC = s_length / s_straight
+            if TC < 10:
+                tortuosity_list.append(TC)
+
+    if len(tortuosity_list) == 0:
+        return {
+            "Mean_Tortuosity": 0,
+            "Median_Tortuosity": 0,
+            "Std_Dev_TC": 0,
+            "Number_of_segments": 0
+        }
     
-    # Check if any preprocessing has been completed
-    has_od_oc = 'preprocessed_image' in st.session_state
-    has_vessel = 'vessel_preprocessed' in st.session_state
+    return {
+        "Mean_Tortuosity": round(np.mean(tortuosity_list), 4),
+        "Median_Tortuosity": round(np.median(tortuosity_list), 4),
+        "Std_Dev_TC": round(np.std(tortuosity_list), 4),
+        "Number_of_segments": len(tortuosity_list)
+    }
+
+def get_direction_vectors(y, x, img):
+    directions = []
+    for dy in [-1, 0, 1]:
+        for dx in [-1, 0, 1]:
+            if dy == 0 and dx == 0:
+                continue
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < img.shape[0] and 0 <= nx < img.shape[1]:
+                if img[ny, nx] == 1:
+                    directions.append((dy, dx))
+    return directions
+
+def angle_between(v1, v2):
+    dot = v1[0]*v2[0] + v1[1]*v2[1]
+    norm1 = math.hypot(*v1)
+    norm2 = math.hypot(*v2)
+    cos_theta = dot / (norm1 * norm2 + 1e-6)
+    return math.degrees(math.acos(np.clip(cos_theta, -1.0, 1.0)))
+
+def extract_bifurcation_features(vessel_mask):
+    """Extract bifurcation features from vessel mask"""
+    skeleton = skeletonize(vessel_mask > 0).astype(np.uint8)
+    bif_points = []
+
+    for y in range(1, skeleton.shape[0]-1):
+        for x in range(1, skeleton.shape[1]-1):
+            if skeleton[y, x] == 1:
+                neighbors = get_direction_vectors(y, x, skeleton)
+                if len(neighbors) == 3:
+                    angles = [
+                        angle_between(neighbors[i], neighbors[j])
+                        for i in range(3) for j in range(i+1, 3)
+                    ]
+                    if max(angles) - min(angles) > 40:
+                        bif_points.append((x, y))
+
+    return {"Bifurcation_Points": len(bif_points)}
+
+def compute_vessel_length(skel):
+    coords = np.column_stack(np.where(skel > 0))
+    visited = set()
+    length = 0.0
+    neighbor_offsets = [(-1, -1), (-1, 0), (-1, 1),
+                        (0, -1),          (0, 1),
+                        (1, -1),  (1, 0), (1, 1)]
+
+    for y, x in coords:
+        for dy, dx in neighbor_offsets:
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < skel.shape[0] and 0 <= nx < skel.shape[1]:
+                if skel[ny, nx] == 1:
+                    edge = tuple(sorted([(y, x), (ny, nx)]))
+                    if edge not in visited:
+                        dist = np.sqrt((ny - y)**2 + (nx - x)**2)
+                        length += dist
+                        visited.add(edge)
+    return length
+
+def extract_vessel_length_features(vessel_mask):
+    """Extract vessel length features"""
+    skeleton = skeletonize(vessel_mask > 0).astype(np.uint8)
+    vessel_length = compute_vessel_length(skeleton)
+    return {"Vessel_Length": round(vessel_length, 2)}
+
+def compute_vessel_area_and_density(mask):
+    vessel_area = np.sum(mask > 0)
+    total_area = mask.shape[0] * mask.shape[1]
+    vessel_density = vessel_area / total_area
+    return int(vessel_area), round(vessel_density, 6)
+
+def extract_vessel_area_density_features(vessel_mask):
+    """Extract vessel area and density features"""
+    area, density = compute_vessel_area_and_density(vessel_mask)
+    return {
+        "Vessel_Area": area,
+        "Vessel_Density": density
+    }
+
+# ===================== DETECTION PAGE ===================== #
+
+def Detection():
+    st.title("🔬 Glaucoma Detection System")
+    st.markdown("---")
     
-    if not has_od_oc and not has_vessel:
-        st.warning("⚠ Please complete preprocessing first.")
-        return
+    # Initialize session state
+    if 'step_completed' not in st.session_state:
+        st.session_state.step_completed = {'preprocessing': False, 'segmentation': False, 'extraction': False}
     
-    # Let user choose which segmentation to perform
-    available_tasks = []
-    if has_od_oc:
-        available_tasks.append("OD/OC Segmentation")
-    if has_vessel:
-        available_tasks.append("Vessel Segmentation")
+    # STEP 1: PREPROCESSING
+    st.header("📋 Step 1: Preprocessing")
+    st.markdown("Upload your fundus images and select the preprocessing pipeline based on your analysis needs.")
     
-    if len(available_tasks) == 1:
-        selected_task = available_tasks[0]
-        st.info(f"Available task: {selected_task}")
-    else:
-        selected_task = st.selectbox("Select Segmentation Task", available_tasks)
+    # Image upload section
+    col1, col2 = st.columns(2)
     
-    # Ensure correct indentation for the following line
-    if selected_task == "OD/OC Segmentation":
-        st.subheader("OD/OC Segmentation")
-    
-        preprocessed_img = st.session_state['preprocessed_image']
-    
-        col1, col2 = st.columns(2)
-        with col1:
-            st.image(preprocessed_img, caption="Preprocessed Image")
+    with col1:
+        st.subheader("🔍 OD/OC Analysis")
+        st.markdown("*For Cup-to-Disc Ratio analysis*")
+        uploaded_file_od = st.file_uploader("Upload Cropped ONH Image", type=["png", "jpg", "jpeg"], key="od_oc_upload")
         
-        if st.button("Run OD/OC Segmentation"):
-            with st.spinner("Loading model and running segmentation..."):
-                model = load_od_oc_model()
+        if uploaded_file_od:
+            image_od = Image.open(uploaded_file_od).convert('RGB')
+            img_np_od = np.array(image_od)
+            st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
+            
+            if st.button("🚀 Apply OD/OC Preprocessing", key="preprocess_od_oc"):
+                with st.spinner("Processing OD/OC preprocessing..."):
+                    results = preprocess_od_oc_stepwise(img_np_od)
+                    st.session_state['preprocessing_results_od'] = results
+                    st.session_state['preprocessed_image_od'] = results['step6_final']
+                    st.session_state['original_image_od'] = img_np_od
+                    st.session_state.step_completed['preprocessing'] = True
+                    
+                    # Display results
+                    st.subheader("🔄 OD/OC Preprocessing Pipeline Results")
+                    cols = st.columns(4)
+                    
+                    with cols[0]:
+                        st.image(img_np_od, caption="Original")
+                    with cols[1]:
+                        st.image(results['step1_resized'], caption="1. Resized")
+                    with cols[2]:
+                        st.image(results['step2_sharpened'], caption="2. Sharpened")
+                    with cols[3]:
+                        st.image(results['step3_color_norm'], caption="3. Color Norm")
+                    
+                    cols2 = st.columns(3)
+                    with cols2[0]:
+                        st.image(results['step4_gamma'], caption="4. Gamma Correct")
+                    with cols2[1]:
+                        st.image(results['step5_clahe'], caption="5. CLAHE")
+                    with cols2[2]:
+                        st.image(results['step6_final'], caption="6. Final Result")
+                    
+                    st.success("✅ OD/OC preprocessing completed!")
+    
+    with col2:
+        st.subheader("🩸 Vessel Analysis")
+        st.markdown("*For blood vessel morphology analysis*")
+        uploaded_file_vessel = st.file_uploader("Upload Full Fundus Image", type=["png", "jpg", "jpeg"], key="vessel_upload")
+        
+        if uploaded_file_vessel:
+            image_vessel = Image.open(uploaded_file_vessel).convert('RGB')
+            img_np_vessel = np.array(image_vessel)
+            st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
+            
+            if st.button("🚀 Apply Vessel Preprocessing", key="preprocess_vessel"):
+                with st.spinner("Processing vessel preprocessing..."):
+                    results = preprocess_vessel_stepwise(img_np_vessel)
+                    st.session_state['preprocessing_results_vessel'] = results
+                    st.session_state['preprocessed_image_vessel'] = results['step5_final']
+                    st.session_state['original_image_vessel'] = img_np_vessel
+                    st.session_state.step_completed['preprocessing'] = True
+                    
+                    # Display results
+                    st.subheader("🔄 Vessel Preprocessing Pipeline Results")
+                    cols = st.columns(3)
+                    
+                    with cols[0]:
+                        st.image(img_np_vessel, caption="Original")
+                    with cols[1]:
+                        st.image(results['step1_resized'], caption="1. Resized")
+                    with cols[2]:
+                        st.image(results['step2_green'], caption="2. Green Channel")
+                    
+                    cols2 = st.columns(3)
+                    with cols2[0]:
+                        st.image(results['step3_gamma'], caption="3. Gamma Correct")
+                    with cols2[1]:
+                        st.image(results['step4_clahe'], caption="4. CLAHE")
+                    with cols2[2]:
+                        st.image(results['step5_final'], caption="5. Final Result")
+                    
+                    st.success("✅ Vessel preprocessing completed!")
+    
+    st.markdown("---")
+    
+    # STEP 2: SEGMENTATION (Only show if preprocessing is completed)
+    if st.session_state.step_completed['preprocessing']:
+        st.header("🎯 Step 2: Segmentation")
+        st.markdown("Perform automatic segmentation using trained deep learning models.")
+        
+        segmentation_cols = st.columns(2)
+        
+        # OD/OC Segmentation
+        if 'preprocessed_image_od' in st.session_state:
+            with segmentation_cols[0]:
+                st.subheader("🔍 OD/OC Segmentation")
+                preprocessed_img_od = st.session_state['preprocessed_image_od']
                 
-                if model is not None:
-                    prediction = predict_od_oc(model, preprocessed_img)
-                    
-                    # Convert prediction to colored segmentation map
-                    if len(prediction.shape) == 3 and prediction.shape[0] > 1:
-                        # Multi-class output - get the class with highest probability
-                        seg_map = np.argmax(prediction, axis=0)
-                    else:
-                        # Single output - assume it's already class indices
-                        seg_map = prediction.squeeze()
-                    
-                    # Create colored visualization
-                    # 0 = Background (black), 1 = OD (red), 2 = OC (green)
-                    colored_result = np.zeros((seg_map.shape[0], seg_map.shape[1], 3), dtype=np.uint8)
-                    
-                    # Background stays black (0, 0, 0)
-                    colored_result[seg_map == 1] = [169, 169, 169]  # OD = Grey
-                    colored_result[seg_map == 2] = [255, 255, 255]  # OC = White
-                    
-                    with col2:
-                        st.image(colored_result, caption="OD/OC Segmentation (Red: OD, Green: OC)")
-                    
-                    # Show legend
-                    st.subheader("Legend")
-                    legend_col1, legend_col2, legend_col3 = st.columns(3)
-                    with legend_col1:
-                        st.markdown("🩶 **Red: Optic Disc (OD)**")
-                    with legend_col2:
-                        st.markdown("🤍 **White: Optic Cup (OC)**")
-                    with legend_col3:
-                        st.markdown("🖤 **Black: Background**")
-                    
-                    # Save results
-                    st.session_state['segmentation_map'] = seg_map
-                    st.session_state['colored_segmentation'] = colored_result
-                    st.session_state['segmentation_completed'] = True
-                    st.session_state['segmentation_type'] = 'OD/OC'
-                    
-                    st.success("✅ OD/OC segmentation completed!")
-
-    
-    elif selected_task == "Vessel Segmentation":
-        st.subheader("Vessel Segmentation")
-        
-        preprocessed_img = st.session_state['vessel_preprocessed']
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.image(preprocessed_img, caption="Preprocessed Image")
-        
-        if st.button("Run Vessel Segmentation"):
-            with st.spinner("Loading model and running segmentation..."):
-                model = load_vessel_model()
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.image(preprocessed_img_od, caption="Preprocessed Image")
                 
-                if model is not None:
-                    prediction = predict_vessel(model, preprocessed_img)
-                    
-                    # Convert prediction to displayable format
-                    vessel_mask = (prediction > 0.5).astype(np.uint8) * 255
-                    if len(vessel_mask.shape) == 3:
-                        vessel_mask = vessel_mask[0]
-                    
-                    with col2:
-                        st.image(vessel_mask, caption="Vessel Segmentation")
-                    
-                    # Save results
-                    st.session_state['vessel_mask'] = vessel_mask
-                    st.session_state['segmentation_completed'] = True
-                    st.session_state['segmentation_type'] = 'Vessel'
-                    
-                    st.success("✅ Vessel segmentation completed!")
-
-# ===================== OTHER PAGES ===================== #
-
-def FeatureExtraction():
-    st.title("Feature Extraction")
-    feat_type = st.selectbox("Feature Source", ["OD/OC Segmentation", "Vessel Segmentation"])
-    
-    if feat_type == "OD/OC Segmentation":
-        st.markdown("""
-        *OD/OC Features:* 
-        - Cup-to-Disc Ratio (CDR)
-        - Disc area and cup area
-        - Rim area
-        - Eccentricity
-        - Solidity
-        - Aspect ratio
-        """)
+                if st.button("🎯 Run OD/OC Segmentation", key="segment_od_oc"):
+                    with st.spinner("Running OD/OC segmentation..."):
+                        model = load_od_oc_model()
+                        
+                        if model is not None:
+                            prediction = predict_od_oc(model, preprocessed_img_od)
+                            
+                            if len(prediction.shape) == 3 and prediction.shape[0] > 1:
+                                seg_map = np.argmax(prediction, axis=0)
+                            else:
+                                seg_map = prediction.squeeze()
+                            
+                            # Create colored visualization
+                            colored_result = np.zeros((seg_map.shape[0], seg_map.shape[1], 3), dtype=np.uint8)
+                            colored_result[seg_map == 1] = [169, 169, 169]  # OD = Grey
+                            colored_result[seg_map == 2] = [255, 255, 255]  # OC = White
+                            
+                            with col2:
+                                st.image(colored_result, caption="OD/OC Segmentation")
+                            
+                            # Save results
+                            st.session_state['segmentation_map_od'] = seg_map
+                            st.session_state['colored_segmentation_od'] = colored_result
+                            st.session_state['segmentation_completed_od'] = True
+                            st.session_state.step_completed['segmentation'] = True
+                            
+                            st.success("✅ OD/OC segmentation completed!")
         
-    elif feat_type == "Vessel Segmentation":
-        st.markdown("""
-        *Vessel Features:*
-        - Vessel tortuosity
-        - Skeleton length
-        - Bifurcation points
-        - Vessel density
-        - Average vessel width
-        - Fractal dimension
-        """)
-
-def Classification():
-    st.title("Glaucoma Classification")
-    st.markdown("""
-    *Classification Pipeline:*
-    1. Load extracted features
-    2. Apply trained CNN model
-    3. Predict glaucoma severity level
+        # Vessel Segmentation
+        if 'preprocessed_image_vessel' in st.session_state:
+            with segmentation_cols[1]:
+                st.subheader("🩸 Vessel Segmentation")
+                preprocessed_img_vessel = st.session_state['preprocessed_image_vessel']
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.image(preprocessed_img_vessel, caption="Preprocessed Image")
+                
+                if st.button("🎯 Run Vessel Segmentation", key="segment_vessel"):
+                    with st.spinner("Running vessel segmentation..."):
+                        model = load_vessel_model()
+                        
+                        if model is not None:
+                            prediction = predict_vessel(model, preprocessed_img_vessel)
+                            
+                            # Convert prediction to displayable format
+                            vessel_mask = (prediction > 0.5).astype(np.uint8) * 255
+                            if len(vessel_mask.shape) == 3:
+                                vessel_mask = vessel_mask[0]
+                            
+                            with col2:
+                                st.image(vessel_mask, caption="Vessel Segmentation")
+                            
+                            # Save results
+                            st.session_state['vessel_mask'] = vessel_mask
+                            st.session_state['segmentation_completed_vessel'] = True
+                            st.session_state.step_completed['segmentation'] = True
+                            
+                            st.success("✅ Vessel segmentation completed!")
+        
+        st.markdown("---")
     
-    *Severity Levels:*
-    - 🟢 Normal
-    - 🟡 Mild Glaucoma
-    - 🟠 Moderate Glaucoma
-    - 🔴 Severe Glaucoma
-    """)
+    # STEP 3: FEATURE EXTRACTION (Only show if segmentation is completed)
+    if st.session_state.step_completed['segmentation']:
+        st.header("📊 Step 3: Feature Extraction")
+        st.markdown("Extract morphological features from segmentation results for classification.")
+        
+        # Check which segmentations are available
+        has_od_oc = 'segmentation_completed_od' in st.session_state and st.session_state['segmentation_completed_od']
+        has_vessel = 'segmentation_completed_vessel' in st.session_state and st.session_state['segmentation_completed_vessel']
+        
+        if has_od_oc or has_vessel:
+            extraction_cols = st.columns(2)
+            
+            # Feature extraction info
+            with extraction_cols[0]:
+                st.subheader("🔍 Available Features")
+                if has_od_oc:
+                    st.markdown("""
+                    **OD/OC Features:**
+                    - Cup-to-Disc Ratio (CDR)
+                    - Disc & Cup morphological properties
+                    - GLCM texture features
+                    """)
+                
+                if has_vessel:
+                    st.markdown("""
+                    **Vessel Features:**
+                    - Vessel tortuosity analysis
+                    - Bifurcation points detection
+                    - Vessel length & density
+                    - GLCM texture features
+                    """)
+            
+            with extraction_cols[1]:
+                st.subheader("🚀 Start Extraction")
+                
+                if st.button("📈 START FEATURE EXTRACTION", key="extract_features", type="primary"):
+                    with st.spinner("Extracting features from segmentation results..."):
+                        extracted_features = {}
+                        
+                        # Extract OD/OC features
+                        if has_od_oc:
+                            st.write("🔍 Extracting OD/OC features...")
+                            
+                            # Regionprops features
+                            seg_map = st.session_state['segmentation_map_od']
+                            od_oc_features = extract_od_oc_features(seg_map)
+                            
+                            if od_oc_features:
+                                extracted_features.update(od_oc_features)
+                            
+                            # GLCM features from preprocessed image
+                            preprocessed_img = st.session_state['preprocessed_image_od']
+                            glcm_features_od = extract_glcm_features(preprocessed_img)
+                            
+                            # Add suffix to distinguish from vessel GLCM
+                            glcm_features_od_renamed = {f"{k}_cdr": v for k, v in glcm_features_od.items()}
+                            extracted_features.update(glcm_features_od_renamed)
+                        
+                        # Extract Vessel features
+                        if has_vessel:
+                            st.write("🩸 Extracting vessel features...")
+                            
+                            vessel_mask = st.session_state['vessel_mask']
+                            
+                            # GLCM features from preprocessed vessel image
+                            preprocessed_vessel_img = st.session_state['preprocessed_image_vessel']
+                            glcm_features_vessel = extract_glcm_features(preprocessed_vessel_img)
+                            glcm_features_vessel_renamed = {f"{k}_vessel": v for k, v in glcm_features_vessel.items()}
+                            extracted_features.update(glcm_features_vessel_renamed)
+                            
+                            # Tortuosity features
+                            tortuosity_features = extract_tortuosity_features(vessel_mask)
+                            extracted_features.update(tortuosity_features)
+                            
+                            # Bifurcation features
+                            bifurcation_features = extract_bifurcation_features(vessel_mask)
+                            extracted_features.update(bifurcation_features)
+                            
+                            # Vessel length features
+                            length_features = extract_vessel_length_features(vessel_mask)
+                            extracted_features.update(length_features)
+                            
+                            # Vessel area and density features
+                            area_density_features = extract_vessel_area_density_features(vessel_mask)
+                            extracted_features.update(area_density_features)
+                        
+                        # Save extracted features
+                        st.session_state['extracted_features'] = extracted_features
+                        st.session_state.step_completed['extraction'] = True
+                        
+                        st.success("✅ Feature extraction completed!")
+            
+            # Display extracted features table
+            if 'extracted_features' in st.session_state:
+                st.subheader("📋 Extracted Features Summary")
+                
+                features_df = pd.DataFrame([st.session_state['extracted_features']])
+                
+                # Display features in a more organized way
+                if has_od_oc:
+                    st.markdown("**🔍 OD/OC Features:**")
+                    od_oc_cols = [col for col in features_df.columns if any(x in col.lower() for x in ['cdr', 'cup', 'disc', '_cdr'])]
+                    if od_oc_cols:
+                        st.dataframe(features_df[od_oc_cols], use_container_width=True)
+                
+                if has_vessel:
+                    st.markdown("**🩸 Vessel Features:**")
+                    vessel_cols = [col for col in features_df.columns if any(x in col.lower() for x in ['vessel', 'tortuosity', 'bifurcation', 'length', 'area', 'density', '_vessel'])]
+                    if vessel_cols:
+                        st.dataframe(features_df[vessel_cols], use_container_width=True)
+                
+                st.markdown("**📊 Complete Features Table:**")
+                st.dataframe(features_df, use_container_width=True)
+        
+        st.markdown("---")
+    
+    # STEP 4: CLASSIFICATION (Only show if feature extraction is completed)
+    if st.session_state.step_completed['extraction']:
+        st.header("🎯 Step 4: Glaucoma Classification")
+        st.markdown("Classify glaucoma severity using extracted morphological features.")
+        
+        classification_cols = st.columns([2, 1])
+        
+        with classification_cols[0]:
+            st.subheader("🔬 Classification Results")
+            
+            if st.button("🎯 CLASSIFY GLAUCOMA SEVERITY", key="classify", type="primary"):
+                with st.spinner("Classifying glaucoma severity..."):
+                    # Placeholder for actual classification
+                    # In real implementation, you would load your trained CNN model here
+                    
+                    # Simulate classification result
+                    import random
+                    severity_levels = ["Normal", "Mild Glaucoma", "Moderate Glaucoma", "Severe Glaucoma"]
+                    colors = ["🟢", "🟡", "🟠", "🔴"]
+                    
+                    # Random prediction for demo (replace with actual model prediction)
+                    predicted_class = random.choice(severity_levels)
+                    confidence = random.uniform(0.7, 0.95)
+                    
+                    # Display result
+                    st.markdown("### 🎯 Classification Result:")
+                    
+                    severity_index = severity_levels.index(predicted_class)
+                    color_emoji = colors[severity_index]
+                    
+                    st.markdown(f"""
+                    <div style="padding: 20px; border-radius: 10px; background-color: #f0f2f6; margin: 10px 0;">
+                        <h2 style="color: #1f4e79; margin: 0;">{color_emoji} {predicted_class}</h2>
+                        <p style="font-size: 18px; margin: 5px 0;"><strong>Confidence:</strong> {confidence:.1%}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Save classification result
+                    st.session_state['classification_result'] = {
+                        'predicted_class': predicted_class,
+                        'confidence': confidence
+                    }
+                    
+                    st.success("✅ Classification completed!")
+        
+        with classification_cols[1]:
+            st.subheader("📊 Severity Levels")
+            st.markdown("""
+            **Classification Categories:**
+            
+            🟢 **Normal**
+            - Healthy optic nerve
+            - Normal CDR values
+            
+            🟡 **Mild Glaucoma**
+            - Early signs of damage
+            - Slight CDR increase
+            
+            🟠 **Moderate Glaucoma**
+            - Noticeable optic nerve damage
+            - Significant CDR changes
+            
+            🔴 **Severe Glaucoma**
+            - Advanced optic nerve damage
+            - High CDR values
+            """)
+    
+    # Progress indicator
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🔄 Progress Tracker")
+    
+    progress_items = [
+        ("Preprocessing", st.session_state.step_completed['preprocessing']),
+        ("Segmentation", st.session_state.step_completed['segmentation']),
+        ("Feature Extraction", st.session_state.step_completed['extraction']),
+        ("Classification", 'classification_result' in st.session_state)
+    ]
+    
+    for step, completed in progress_items:
+        if completed:
+            st.sidebar.markdown(f"✅ {step}")
+        else:
+            st.sidebar.markdown(f"⏳ {step}")
 
 # ===================== PAGE ROUTING ===================== #
 
@@ -522,26 +885,17 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    st.sidebar.title("👁 Navigation")
-    page = st.sidebar.selectbox("Go to Page", [
+    st.sidebar.title("👁 Glaucoma Detection System")
+    page = st.sidebar.selectbox("📍 Navigation", [
         "Cover", 
-        "Preprocessing", 
-        "Segmentation", 
-        "Feature Extraction", 
-        "Classification", 
+        "Detection"
     ])
     
     # Route to appropriate page
     if page == "Cover":
         Cover()
-    elif page == "Preprocessing":
-        Preprocessing()
-    elif page == "Segmentation":
-        Segmentation()
-    elif page == "Feature Extraction":
-        FeatureExtraction()
-    elif page == "Classification":
-        Classification()
+    elif page == "Detection":
+        Detection()
 
 if __name__ == "__main__":
     main()
