@@ -523,13 +523,14 @@ def Detection():
     # STEP 1: PREPROCESSING
     st.header("⚙️ Step 1: PREPROCESSING ")
     st.markdown("Upload your fundus images and select the preprocessing pipeline based on your analysis needs.")
+
+    if 'last_uploaded_od_name' not in st.session_state:
+    st.session_state['last_uploaded_od_name'] = None
+    if 'last_uploaded_vessel_name' not in st.session_state:
+    st.session_state['last_uploaded_vessel_name'] = None
     
     # Image upload section
     col1, col2 = st.columns(2)
-    
-    # Inisialisasi session_state untuk file OD/OC
-if 'last_uploaded_od_name' not in st.session_state:
-    st.session_state['last_uploaded_od_name'] = None
 
 with col1:
     st.subheader("🔘 Optic Disc & Cup (OD/OC)")
@@ -590,11 +591,6 @@ with col1:
             st.image(results['step5_clahe'], caption="5. CLAHE")
         with cols2[2]:
             st.image(results['step6_final'], caption="6. Final Result")
-
-    
-    # Inisialisasi session_state untuk file VESSEL
-if 'last_uploaded_vessel_name' not in st.session_state:
-    st.session_state['last_uploaded_vessel_name'] = None
 
 with col2:
     st.subheader("🩸 Retina Vessel")
