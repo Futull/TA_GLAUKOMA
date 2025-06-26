@@ -25,7 +25,7 @@ import pickle
 def Cover():
     col1, col2, col3 = st.columns([1, 1, 6])
 
-    st.title("TUGAS AKHIR")
+    st.title("")
     st.header("KLASIFIKASI GLAUKOMA")
 
 
