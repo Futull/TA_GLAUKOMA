@@ -842,20 +842,27 @@ def Detection():
 
         if st.button("🧠 Run Classification", key="run_classification"):
             with st.spinner("Running SVM classification..."):
-                # Pastikan semua fitur yang dibutuhkan model ada di extracted_features
+                # Buat dict lokal untuk mapping, supaya session_state tidak berubah
+                features_to_classify = extracted.copy()  # atau extracted_features.copy()
+                
+                # Cek dan isi fitur yang missing (jika ada)
                 for f in selected_features:
-                    if f not in extracted_features:
-                        extracted_features[f] = 0  # atau np.nan jika kamu mau
-        
-                input_vector = [extracted_features[f] for f in selected_features]
-        
-                # Debug dan prediksi lanjut, dst...
+                    if f not in features_to_classify:
+                        features_to_classify[f] = 0  # atau np.nan
+                
+                # Susun input_vector sesuai urutan selected_features
+                input_vector = [features_to_classify[f] for f in selected_features]
+                
+                # Tampilkan debug
                 st.subheader("🔎 DEBUG: Nilai 34 Fitur Sebelum Scaling")
                 for f, v in zip(selected_features, input_vector):
                     st.write(f"{f}: {v}")
-        
+                
+                # Lanjutkan scaling & prediksi
                 input_array = np.array(input_vector).reshape(1, -1)
                 scaled_input = scaler.transform(input_array)
+                prediction = model.predict(scaled_input)[0]
+                probabilities = model.predict_proba(scaled_input)[0]
         
                 # ======== DEBUG NILAI FITUR SETELAH SCALING ========
                 st.subheader("🔎 DEBUG: Nilai 34 Fitur Setelah Scaling")
