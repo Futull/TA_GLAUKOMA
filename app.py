@@ -22,12 +22,28 @@ import pickle
 
 # ===================== COVER PAGE ===================== #
 
+# ===================== COVER PAGE ===================== #
+
 def Cover():
     col1, col2, col3 = st.columns([1, 1, 6])
 
-    st.title("")
-    st.header("KLASIFIKASI GLAUKOMA")
+    with col1:
+        if os.path.exists("assets/logoits.png"):
+            st.image("assets/logoits.png", width=80)
+        else:
+            st.write("")
 
+    with col2:
+        if os.path.exists("assets/logobme.png"):
+            st.image("assets/logobme.png", width=80)
+        else:
+            st.write("")
+
+    st.title("TUGAS AKHIR")
+    st.header("KLASIFIKASI TINGKAT KEPARAHAN GLAUKOMA BERDASARKAN FITUR MORFOLOGI PADA CITRA FUNDUS RETINA MENGGUNAKAN CONVOLUTIONAL NEURAL NETWORK (CNN)")
+    st.subheader("Nadhifatul Fuadah - 5023211053")
+    st.markdown("### Dosen Pembimbing 1: Prof. Dr. Tri Arief Sardjono, S.T., M.T")
+    st.markdown("### Dosen Pembimbing 2: Nada Fitrieyatul Hikmah, S.T., M.T")
 
     st.sidebar.info(
         "Application Guide:\n"
