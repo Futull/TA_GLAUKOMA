@@ -880,9 +880,6 @@ def Detection():
                 # Susun input_vector sesuai urutan selected_features
                 input_vector = [features_to_classify[f] for f in selected_features]
                 
-                for f, v in zip(selected_features, input_vector):
-                    st.write(f"{f}: {v}")
-                
                 # Lanjutkan scaling & prediksi
                 input_array = np.array(input_vector).reshape(1, -1)
                 scaled_input = scaler.transform(input_array)
@@ -901,12 +898,6 @@ def Detection():
                 st.session_state['classification_result'] = result_label
 
                 st.success(f"🧠 Predicted Glaucoma Severity: **{result_label}**")
-                st.markdown("### 🔢 Class Probabilities")
-                prob_df = pd.DataFrame([probabilities], columns=[label_map[i] for i in range(len(probabilities))])
-                st.dataframe(prob_df, use_container_width=True)
-
-                model, scaler, selected_features = load_svm_classifier()
-                st.write("Model classes:", model.classes_)
 
         st.sidebar.markdown("---")
         st.sidebar.subheader("🔄 Progress Tracker")
