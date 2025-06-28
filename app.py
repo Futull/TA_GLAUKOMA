@@ -315,7 +315,25 @@ def extract_glcm_features(image, levels=32):
         features[f"mean_{prop}"] = np.mean(values)
     return features
 
-# Vessel Feature Extraction Functions
+========== Vessel Feature Extraction Functions ============
+# GLCM
+def extract_glcm_mean_features_green(image_rgb, levels=32):
+    green = image_rgb[:, :, 1]
+    image_ubyte = img_as_ubyte(green)
+    image_quantized = np.clip((image_ubyte / (256 // levels)).astype(np.uint8), 0, levels - 1)
+
+    angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+    glcm = graycomatrix(image_quantized, distances=[1], angles=angles,
+                        levels=levels, symmetric=True, normed=True)
+
+    props = ['contrast', 'correlation', 'energy', 'homogeneity']
+    features = {}
+    for prop in props:
+        values = graycoprops(glcm, prop)[0]
+        features[f"mean_{prop}_vessel"] = np.mean(values)
+
+    return features
+
 def find_endpoints(skel):
     kernel = np.array([[1,1,1], [1,10,1], [1,1,1]], dtype=np.uint8)
     conv = cv2.filter2D(skel.astype(np.uint8), -1, kernel)
@@ -343,16 +361,30 @@ def build_graph(skel):
     return G
 
 def extract_tortuosity_features(vessel_mask):
-    skeleton = skeletonize(vessel_mask > 0).astype(np.uint8)
-    G = build_graph(skeleton)
+    from networkx import Graph
+    bin_mask = (vessel_mask > 127).astype(np.uint8)
+    skeleton = skeletonize(bin_mask).astype(np.uint8)
+
+    G = Graph()
+    h, w = skeleton.shape
+    for y in range(h):
+        for x in range(w):
+            if skeleton[y, x]:
+                for dy in [-1, 0, 1]:
+                    for dx in [-1, 0, 1]:
+                        ny, nx = y + dy, x + dx
+                        if (dy != 0 or dx != 0) and 0 <= ny < h and 0 <= nx < w:
+                            if skeleton[ny, nx]:
+                                G.add_edge((y, x), (ny, nx))
+
     endpoints = [n for n in G.nodes if G.degree[n] == 1]
     branches = [n for n in G.nodes if G.degree[n] >= 3]
     important_points = set(endpoints + branches)
+
     visited = set()
     segments = []
     for node in important_points:
-        neighbors = list(G.neighbors(node))
-        for neighbor in neighbors:
+        for neighbor in G.neighbors(node):
             if (node, neighbor) in visited or (neighbor, node) in visited:
                 continue
             path = [node, neighbor]
@@ -370,6 +402,7 @@ def extract_tortuosity_features(vessel_mask):
                 segments.append(path)
                 for i in range(len(path) - 1):
                     visited.add((path[i], path[i+1]))
+
     tortuosity_list = []
     for seg in segments:
         s_length = sum(euclidean(seg[i], seg[i+1]) for i in range(len(seg) - 1))
@@ -378,19 +411,14 @@ def extract_tortuosity_features(vessel_mask):
             TC = s_length / s_straight
             if TC < 10:
                 tortuosity_list.append(TC)
-    if len(tortuosity_list) == 0:
-        return {
-            "Mean Tortuosity": 0,
-            "Median Tortuosity": 0,
-            "Std Dev TC": 0,
-            "Number of segments": 0
-        }
+
     return {
-        "Mean Tortuosity": round(np.mean(tortuosity_list), 4),
-        "Median Tortuosity": round(np.median(tortuosity_list), 4),
-        "Std Dev TC": round(np.std(tortuosity_list), 4),
+        "Mean Tortuosity": round(np.mean(tortuosity_list), 4) if tortuosity_list else 0,
+        "Median Tortuosity": round(np.median(tortuosity_list), 4) if tortuosity_list else 0,
+        "Std Dev TC": round(np.std(tortuosity_list), 4) if tortuosity_list else 0,
         "Number of segments": len(tortuosity_list)
     }
+
 
 def get_direction_vectors(y, x, img):
     directions = []
@@ -447,9 +475,11 @@ def compute_vessel_length(skel):
     return length
 
 def extract_vessel_length_features(vessel_mask):
-    skeleton = skeletonize(vessel_mask > 0).astype(np.uint8)
-    vessel_length = compute_vessel_length(skeleton)
-    return {"Vessel_Length": round(vessel_length, 2)}
+    bin_mask = (vessel_mask > 127).astype(np.uint8)
+    skeleton = skeletonize(bin_mask).astype(np.uint8)
+    return {
+        "Vessel_Length": round(compute_vessel_length(skeleton), 2)
+    }
 
 def compute_vessel_area_and_density(mask):
     Vessel_Area = np.sum(mask > 0)
@@ -779,42 +809,28 @@ def Detection():
                         extracted_features.update(glcm_features_od_renamed)
                     
                     # Extract Vessel features
-                    if has_vessel_segmentation:
-                        st.write("🩸 Extracting Retina Vessel Features...")
-                        
-                        vessel_mask = st.session_state['vessel_mask']
-                        vessel_features = {}
-                        
-                        # GLCM features from preprocessed vessel image
-                        preprocessed_vessel_img = st.session_state['preprocessed_image_vessel']
-                        glcm_features_vessel = extract_glcm_features(preprocessed_vessel_img)
-                        glcm_features_vessel_renamed = {f"{k}_vessel": v for k, v in glcm_features_vessel.items()}
-                        vessel_features.update(glcm_features_vessel_renamed)
-                        
-                        # Tortuosity features
-                        tortuosity_features = extract_tortuosity_features(vessel_mask)
-                        vessel_features.update(tortuosity_features)
-                        
-                        # Bifurcation features
-                        bifurcation_features = extract_bifurcation_features(vessel_mask)
-                        vessel_features.update(bifurcation_features)
-                        
-                        # Vessel length features
-                        length_features = extract_vessel_length_features(vessel_mask)
-                        vessel_features.update(length_features)
-                        
-                        # Vessel area and density features
-                        area_density_features = extract_vessel_area_density_features(vessel_mask)
-                        vessel_features.update(area_density_features)
-                        
-                        extracted_features.update(vessel_features)
-                        st.session_state['extracted_features_vessel'] = vessel_features
-                    
-                    # Save extracted features
-                    st.session_state['extracted_features'] = extracted_features
-                    st.session_state.step_completed['extraction'] = True
-                    
-                    st.success("✅ Feature extraction completed!")
+                    # Vessel Features
+                if has_vessel_segmentation:
+                    st.write("🩸 Extracting Retina Vessel Features...")
+                    vessel_mask = st.session_state['vessel_mask']
+                    preprocessed_vessel_img = st.session_state['preprocessed_image_vessel']
+                    vessel_features = {}
+
+                    glcm_features_vessel = extract_glcm_mean_features_green(preprocessed_vessel_img)
+                    glcm_features_vessel_renamed = {f"{k}_vessel": v for k, v in glcm_features_vessel.items()}
+                    vessel_features.update(glcm_features_vessel_renamed)
+
+                    vessel_features.update(extract_tortuosity_features(vessel_mask))
+                    vessel_features.update(extract_bifurcation_features(vessel_mask))
+                    vessel_features.update(extract_vessel_length_features(vessel_mask))
+                    vessel_features.update(extract_vessel_area_density_features(vessel_mask))
+
+                    extracted_features.update(vessel_features)
+                    st.session_state['extracted_features_vessel'] = vessel_features
+
+                st.session_state['extracted_features'] = extracted_features
+                st.session_state.step_completed['extraction'] = True
+                st.success("✅ Feature extraction completed!")
         
         # Display extracted features table if available
         if st.session_state.get('extracted_features') is not None:
@@ -850,11 +866,6 @@ def Detection():
 
         missing = set(selected_features) - set(extracted.keys())
         extra = set(extracted.keys()) - set(selected_features)
-        st.subheader("🔎 Debug: Feature Key Check")
-        st.write("Extracted feature keys:", list(extracted.keys()))
-        st.write("Model required features:", selected_features)
-        st.write("Missing features:", missing)
-        st.write("Extra features (tidak dipakai model):", extra)
 
         if st.button("🧠 Run Classification", key="run_classification"):
             with st.spinner("Running SVM classification..."):
@@ -869,8 +880,6 @@ def Detection():
                 # Susun input_vector sesuai urutan selected_features
                 input_vector = [features_to_classify[f] for f in selected_features]
                 
-                # Tampilkan debug
-                st.subheader("🔎 DEBUG: Nilai 34 Fitur Sebelum Scaling")
                 for f, v in zip(selected_features, input_vector):
                     st.write(f"{f}: {v}")
                 
@@ -880,9 +889,6 @@ def Detection():
                 prediction = model.predict(scaled_input)[0]
                 probabilities = model.predict_proba(scaled_input)[0]
         
-                # ======== DEBUG NILAI FITUR SETELAH SCALING ========
-                st.subheader("🔎 DEBUG: Nilai 34 Fitur Setelah Scaling")
-                st.write(scaled_input)
                 # ======== END DEBUG ========
         
                 # (3) Prediksi
