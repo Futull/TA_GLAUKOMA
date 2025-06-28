@@ -821,7 +821,19 @@ def Detection():
             
             if has_vessel_segmentation:
                 st.markdown("**🩸 Retina Vessel Features:**")
-                vessel_cols = [col for col in features_df.columns if any(x in col.lower() for x in ['vessel', 'tortuosity', 'bifurcation', 'length', 'area', 'density', '_vessel'])]
+                vessel_cols = [
+                    col for col in features_df.columns
+                    if (
+                        col.endswith('_vessel') or
+                        col.startswith('Vessel_') or
+                        col.startswith('Mean Tortuosity') or
+                        col.startswith('Median Tortuosity') or
+                        col.startswith('StdDev Tortuosity') or
+                        col.startswith('Num Tortuosity') or
+                        col == 'Bifurcation Point'
+                    )
+                ]
+
                 if vessel_cols:
                     st.dataframe(features_df[vessel_cols], use_container_width=True)
             
