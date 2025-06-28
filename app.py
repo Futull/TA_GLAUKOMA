@@ -315,7 +315,7 @@ def extract_glcm_features(image, levels=32):
         features[f"mean_{prop}"] = np.mean(values)
     return features
 
-========== Vessel Feature Extraction Functions ============
+#========== Vessel Feature Extraction Functions ============#
 # GLCM
 def extract_glcm_mean_features_green(image_rgb, levels=32):
     green = image_rgb[:, :, 1]
