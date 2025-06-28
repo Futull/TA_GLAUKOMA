@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from scipy import ndimage
 from scipy.spatial.distance import euclidean
 import pandas as pd
+from skimage.morphology import skeletonize
 import networkx as nx
 import math
 from model_architecture import Build_UNet  # OD/OC
@@ -301,24 +302,26 @@ def extract_od_oc_features(mask):
         "disc_equiv_diameter": round(disc.equivalent_diameter, 2),
     }
 
-def extract_glcm_features(image, levels=32):
+# ===================== OD/OC GLCM =====================
+def extract_glcm_features_odoc(image, levels=32):
     green = image[:, :, 1]
     image_ubyte = img_as_ubyte(green)
     image_quantized = np.clip((image_ubyte / (256 // levels)).astype(np.uint8), 0, levels - 1)
+
     angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
     glcm = graycomatrix(image_quantized, distances=[1], angles=angles,
                         levels=levels, symmetric=True, normed=True)
+
     props = ['contrast', 'correlation', 'energy', 'homogeneity']
     features = {}
     for prop in props:
         values = graycoprops(glcm, prop)[0]
-        features[f"mean_{prop}"] = np.mean(values)
+        features[f"mean_{prop}_cdr"] = np.mean(values)  # OD/OC suffix
     return features
 
-#========== Vessel Feature Extraction Functions ============#
-# GLCM
-def extract_glcm_mean_features_green(image_rgb, levels=32):
-    green = image_rgb[:, :, 1]
+# ===================== VESSEL GLCM =====================
+def extract_glcm_features_vessel(image, levels=32):
+    green = image[:, :, 1]
     image_ubyte = img_as_ubyte(green)
     image_quantized = np.clip((image_ubyte / (256 // levels)).astype(np.uint8), 0, levels - 1)
 
@@ -331,51 +334,25 @@ def extract_glcm_mean_features_green(image_rgb, levels=32):
     for prop in props:
         values = graycoprops(glcm, prop)[0]
         features[f"mean_{prop}_vessel"] = np.mean(values)
-
     return features
 
-def find_endpoints(skel):
-    kernel = np.array([[1,1,1], [1,10,1], [1,1,1]], dtype=np.uint8)
-    conv = cv2.filter2D(skel.astype(np.uint8), -1, kernel)
-    y, x = np.where(conv == 11)
-    return list(zip(y, x))
-
-def find_branch_points(skel):
-    kernel = np.array([[1,1,1], [1,10,1], [1,1,1]], dtype=np.uint8)
-    conv = cv2.filter2D(skel.astype(np.uint8), -1, kernel)
-    y, x = np.where(conv >= 13)
-    return list(zip(y, x))
-
-def build_graph(skel):
-    G = nx.Graph()
-    h, w = skel.shape
-    for y in range(h):
-        for x in range(w):
-            if skel[y, x]:
-                for dy in [-1, 0, 1]:
-                    for dx in [-1, 0, 1]:
-                        ny, nx_ = y + dy, x + dx
-                        if (dy != 0 or dx != 0) and 0 <= ny < h and 0 <= nx_ < w:
-                            if skel[ny, nx_]:
-                                G.add_edge((y, x), (ny, nx_))
-    return G
-
-def extract_tortuosity_features(vessel_mask):
-    from networkx import Graph
+def generate_vessel_skeleton(vessel_mask):
     bin_mask = (vessel_mask > 127).astype(np.uint8)
     skeleton = skeletonize(bin_mask).astype(np.uint8)
-
-    G = Graph()
+    return skeleton
+    
+def extract_tortuosity_features_from_skeleton(skeleton):
+    G = nx.Graph()
     h, w = skeleton.shape
     for y in range(h):
         for x in range(w):
             if skeleton[y, x]:
                 for dy in [-1, 0, 1]:
                     for dx in [-1, 0, 1]:
-                        ny, nx = y + dy, x + dx
-                        if (dy != 0 or dx != 0) and 0 <= ny < h and 0 <= nx < w:
-                            if skeleton[ny, nx]:
-                                G.add_edge((y, x), (ny, nx))
+                        ny, nx_ = y + dy, x + dx
+                        if (dy != 0 or dx != 0) and 0 <= ny < h and 0 <= nx_ < w:
+                            if skeleton[ny, nx_]:
+                                G.add_edge((y, x), (ny, nx_))
 
     endpoints = [n for n in G.nodes if G.degree[n] == 1]
     branches = [n for n in G.nodes if G.degree[n] >= 3]
@@ -409,7 +386,7 @@ def extract_tortuosity_features(vessel_mask):
         s_straight = euclidean(seg[0], seg[-1])
         if s_straight > 0:
             TC = s_length / s_straight
-            if TC < 10:
+            if TC < 10:  # filter abnormal outliers
                 tortuosity_list.append(TC)
 
     return {
@@ -439,8 +416,7 @@ def angle_between(v1, v2):
     cos_theta = dot / (norm1 * norm2 + 1e-6)
     return math.degrees(math.acos(np.clip(cos_theta, -1.0, 1.0)))
 
-def extract_bifurcation_features(vessel_mask):
-    skeleton = skeletonize(vessel_mask > 0).astype(np.uint8)
+def extract_bifurcation_features_from_skeleton(skeleton):
     bif_points = []
     for y in range(1, skeleton.shape[0]-1):
         for x in range(1, skeleton.shape[1]-1):
@@ -455,8 +431,8 @@ def extract_bifurcation_features(vessel_mask):
                         bif_points.append((x, y))
     return {"Bifurcation Point": len(bif_points)}
 
-def compute_vessel_length(skel):
-    coords = np.column_stack(np.where(skel > 0))
+def compute_vessel_length(skeleton):
+    coords = np.column_stack(np.where(skeleton > 0))
     visited = set()
     length = 0.0
     neighbor_offsets = [(-1, -1), (-1, 0), (-1, 1),
@@ -465,8 +441,8 @@ def compute_vessel_length(skel):
     for y, x in coords:
         for dy, dx in neighbor_offsets:
             ny, nx = y + dy, x + dx
-            if 0 <= ny < skel.shape[0] and 0 <= nx < skel.shape[1]:
-                if skel[ny, nx] == 1:
+            if 0 <= ny < skeleton.shape[0] and 0 <= nx < skeleton.shape[1]:
+                if skeleton[ny, nx] == 1:
                     edge = tuple(sorted([(y, x), (ny, nx)]))
                     if edge not in visited:
                         dist = np.sqrt((ny - y)**2 + (nx - x)**2)
@@ -474,24 +450,19 @@ def compute_vessel_length(skel):
                         visited.add(edge)
     return length
 
-def extract_vessel_length_features(vessel_mask):
-    bin_mask = (vessel_mask > 127).astype(np.uint8)
-    skeleton = skeletonize(bin_mask).astype(np.uint8)
+def extract_vessel_length_features_from_skeleton(skeleton):
     return {
         "Vessel_Length": round(compute_vessel_length(skeleton), 2)
     }
 
-def compute_vessel_area_and_density(mask):
-    Vessel_Area = np.sum(mask > 0)
-    total_area = mask.shape[0] * mask.shape[1]
-    Vessel_Density = Vessel_Area / total_area
-    return int(Vessel_Area), round(Vessel_Density, 6)
-
 def extract_vessel_area_density_features(vessel_mask):
-    area, density = compute_vessel_area_and_density(vessel_mask)
+    bin_mask = (vessel_mask > 127).astype(np.uint8)
+    Vessel_Area = np.sum(bin_mask)
+    total_area = vessel_mask.shape[0] * vessel_mask.shape[1]
+    Vessel_Density = Vessel_Area / total_area
     return {
-        "Vessel_Area": area,
-        "Vessel_Density": density
+        "Vessel_Area": int(Vessel_Area),
+        "Vessel_Density": round(Vessel_Density, 6)
     }
 
 @st.cache_resource
@@ -802,11 +773,11 @@ def Detection():
                         
                         # GLCM features from preprocessed image
                         preprocessed_img = st.session_state['preprocessed_image_od']
-                        glcm_features_od = extract_glcm_features(preprocessed_img)
+                        glcm_features_od = extract_glcm_features_odoc(preprocessed_img)
                         
-                        # Add suffix to distinguish from vessel GLCM
-                        glcm_features_od_renamed = {f"{k}_cdr": v for k, v in glcm_features_od.items()}
-                        extracted_features.update(glcm_features_od_renamed)
+                        glcm_features_od = extract_glcm_features_odoc(preprocessed_img)
+                        extracted_features.update(glcm_features_od)
+
                     
                     # Extract Vessel features
                     # Vessel Features
@@ -816,13 +787,16 @@ def Detection():
                     preprocessed_vessel_img = st.session_state['preprocessed_image_vessel']
                     vessel_features = {}
 
-                    glcm_features_vessel = extract_glcm_mean_features_green(preprocessed_vessel_img)
-                    glcm_features_vessel_renamed = {f"{k}_vessel": v for k, v in glcm_features_vessel.items()}
-                    vessel_features.update(glcm_features_vessel_renamed)
+                    glcm_features_vessel = extract_glcm_features_vessel(preprocessed_vessel_img, levels=32)
+                    vessel_features.update(glcm_features_vessel)
 
-                    vessel_features.update(extract_tortuosity_features(vessel_mask))
-                    vessel_features.update(extract_bifurcation_features(vessel_mask))
-                    vessel_features.update(extract_vessel_length_features(vessel_mask))
+                    # Skeleton only once
+                    skeleton = generate_vessel_skeleton(vessel_mask)
+
+                    vessel_features.update(extract_glcm_features_vessel(preprocessed_img))
+                    vessel_features.update(extract_tortuosity_features_from_skeleton(skeleton))
+                    vessel_features.update(extract_bifurcation_features_from_skeleton(skeleton))
+                    vessel_features.update(extract_vessel_length_features_from_skeleton(skeleton))
                     vessel_features.update(extract_vessel_area_density_features(vessel_mask))
 
                     extracted_features.update(vessel_features)
