@@ -33,20 +33,26 @@ def ensure_models_exist():
         {"file_id": "1AaNBCHRaLJ5mtIWG9bc0dtvDjD9Z1pj7", "dest_path": "models/fix_model_odoc.pt"},
         {"file_id": "1vDhVgOmJrZslRQ_j_qtE-UuBNNn5aksD", "dest_path": "models/fix_model_vessel.pt"},
     ]
+    def ensure_models_exist():
+    model_files = [
+        {"file_id": "1AaNBCHRaLJ5mtIWG9bc0dtvDjD9Z1pj7", "dest_path": "models/fix_model_odoc.pt"},
+        {"file_id": "1vDhVgOmJrZslRQ_j_qtE-UuBNNn5aksD", "dest_path": "models/fix_model_vessel.pt"},
+    ]
     for m in model_files:
         if not os.path.exists(m["dest_path"]) or os.stat(m["dest_path"]).st_size == 0:
-            st.warning(f"Downloading model {os.path.basename(m['dest_path'])} from Google Drive...")
+            # Download without any Streamlit output
             os.makedirs(os.path.dirname(m["dest_path"]), exist_ok=True)
             download_from_gdrive(m["file_id"], m["dest_path"])
             size = os.path.getsize(m["dest_path"])
-            st.write(f"Model {os.path.basename(m['dest_path'])} size: {size/1024/1024:.2f} MB")
+            # Optional: bisa tambahkan print untuk debugging lokal (hapus jika tidak mau output apapun)
+            # print(f"Model {os.path.basename(m['dest_path'])} size: {size/1024/1024:.2f} MB")
             if size < 10000:
-                st.error(f"File {m['dest_path']} terlalu kecil, kemungkinan gagal download (HTML/Quota).")
+                # print(f"File {m['dest_path']} terlalu kecil, kemungkinan gagal download (HTML/Quota).")
                 with open(m["dest_path"], 'rb') as f:
                     head = f.read(200)
-                st.write(head)
-            else:
-                st.success(f"Download {os.path.basename(m['dest_path'])} selesai!")
+                # print(head)
+            # else:
+                # print(f"Download {os.path.basename(m['dest_path'])} selesai!")
 
 # ===================== COVER PAGE ===================== #
 
@@ -903,7 +909,7 @@ def Detection():
         missing = set(selected_features) - set(extracted.keys())
         extra = set(extracted.keys()) - set(selected_features)
 
-        if st.button("🧠 Run Classification", key="run_classification"):
+        if st.button("🧠 Run Classification", key="run_classification", type="primary"):
             with st.spinner("Running SVM classification..."):
                 # Buat dict lokal untuk mapping, supaya session_state tidak berubah
                 features_to_classify = extracted.copy()  # atau extracted_features.copy()
