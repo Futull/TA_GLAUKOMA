@@ -10,5 +10,4 @@ Pillow
 torch
 torchvision
 scipy
-requests
 gdown
