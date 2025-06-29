@@ -336,24 +336,40 @@ def extract_glcm_features_vessel(image, levels=32):
         features[f"mean_{prop}_vessel"] = np.mean(values)
     return features
 
-def generate_vessel_skeleton(vessel_mask):
-    bin_mask = (vessel_mask > 127).astype(np.uint8)
+def prepare_vessel_mask(mask):
+        # Jika mask 3D, ambil channel pertama (umumnya [H, W, 3])
+        if mask.ndim == 3:
+            if mask.shape[0] == 3 and mask.shape[2] != 3:
+                # (3, H, W) -> ambil [0]
+                mask = mask[0]
+            else:
+                # (H, W, 3) -> ambil [...,0]
+                mask = mask[..., 0]
+        bin_mask = (mask > 0).astype(np.uint8)
+        return bin_mask
+
+def generate_vessel_skeleton(bin_mask):
+    # Skeletonisasi dari mask biner
     skeleton = skeletonize(bin_mask).astype(np.uint8)
     return skeleton
-    
-def extract_tortuosity_features_from_skeleton(skeleton):
+
+def build_graph(skel):
     G = nx.Graph()
-    h, w = skeleton.shape
+    h, w = skel.shape
     for y in range(h):
         for x in range(w):
-            if skeleton[y, x]:
+            if skel[y, x]:
                 for dy in [-1, 0, 1]:
                     for dx in [-1, 0, 1]:
                         ny, nx_ = y + dy, x + dx
                         if (dy != 0 or dx != 0) and 0 <= ny < h and 0 <= nx_ < w:
-                            if skeleton[ny, nx_]:
+                            if skel[ny, nx_]:
                                 G.add_edge((y, x), (ny, nx_))
+    return G
 
+# =========== TORTUOSITY =============#
+def extract_tortuosity_features_from_skeleton(skeleton):
+    G = build_graph(skeleton)
     endpoints = [n for n in G.nodes if G.degree[n] == 1]
     branches = [n for n in G.nodes if G.degree[n] >= 3]
     important_points = set(endpoints + branches)
@@ -361,7 +377,8 @@ def extract_tortuosity_features_from_skeleton(skeleton):
     visited = set()
     segments = []
     for node in important_points:
-        for neighbor in G.neighbors(node):
+        neighbors = list(G.neighbors(node))
+        for neighbor in neighbors:
             if (node, neighbor) in visited or (neighbor, node) in visited:
                 continue
             path = [node, neighbor]
@@ -386,7 +403,7 @@ def extract_tortuosity_features_from_skeleton(skeleton):
         s_straight = euclidean(seg[0], seg[-1])
         if s_straight > 0:
             TC = s_length / s_straight
-            if TC < 10:  # filter abnormal outliers
+            if TC < 10:
                 tortuosity_list.append(TC)
 
     return {
@@ -396,7 +413,7 @@ def extract_tortuosity_features_from_skeleton(skeleton):
         "Number of segments": len(tortuosity_list)
     }
 
-
+# ============ BIFURCATION POINT =========== #
 def get_direction_vectors(y, x, img):
     directions = []
     for dy in [-1, 0, 1]:
@@ -431,6 +448,7 @@ def extract_bifurcation_features_from_skeleton(skeleton):
                         bif_points.append((x, y))
     return {"Bifurcation Point": len(bif_points)}
 
+# ============ VESSEL LENGTH ===========#
 def compute_vessel_length(skeleton):
     coords = np.column_stack(np.where(skeleton > 0))
     visited = set()
@@ -455,10 +473,10 @@ def extract_vessel_length_features_from_skeleton(skeleton):
         "Vessel_Length": round(compute_vessel_length(skeleton), 2)
     }
 
-def extract_vessel_area_density_features(vessel_mask):
-    bin_mask = (vessel_mask > 127).astype(np.uint8)
+# ===================== VESSEL AREA & DENSITY =============#
+def extract_vessel_area_density_features(bin_mask):
     Vessel_Area = np.sum(bin_mask)
-    total_area = vessel_mask.shape[0] * vessel_mask.shape[1]
+    total_area = bin_mask.shape[0] * bin_mask.shape[1]
     Vessel_Density = Vessel_Area / total_area
     return {
         "Vessel_Area": int(Vessel_Area),
@@ -779,26 +797,35 @@ def Detection():
                         extracted_features.update(glcm_features_od)
 
                     
-                    # Extract Vessel features
+                    # ================Extract Vessel features=============#
                     # Vessel Features
                 if has_vessel_segmentation:
                     st.write("🩸 Extracting Retina Vessel Features...")
                     vessel_mask = st.session_state['vessel_mask']
                     preprocessed_vessel_img = st.session_state['preprocessed_image_vessel']
+
+                    bin_mask = prepare_vessel_mask(vessel_mask)
+                    skeleton = skeletonize(bin_mask).astype(np.uint8)
+
+                    # --- Ekstraksi fitur GLCM hanya dari satu channel green ---
+                    if preprocessed_vessel_img.ndim == 3:
+                        green_img = preprocessed_vessel_img[..., 0]
+                    else:
+                        green_img = preprocessed_vessel_img
+                
                     vessel_features = {}
 
-                    glcm_features_vessel = extract_glcm_features_vessel(preprocessed_vessel_img, levels=32)
+                    # GLCM features dari green channel
+                    glcm_features_vessel = extract_glcm_features_vessel(green_img, levels=32)
                     vessel_features.update(glcm_features_vessel)
 
-                    # Skeleton only once
-                    skeleton = generate_vessel_skeleton(vessel_mask)
-
-                    vessel_features.update(extract_glcm_features_vessel(preprocessed_img))
+                    # Tortuosity, bifurcation, vessel length, area/density dari mask/skeleton biner
                     vessel_features.update(extract_tortuosity_features_from_skeleton(skeleton))
                     vessel_features.update(extract_bifurcation_features_from_skeleton(skeleton))
                     vessel_features.update(extract_vessel_length_features_from_skeleton(skeleton))
-                    vessel_features.update(extract_vessel_area_density_features(vessel_mask))
+                    vessel_features.update(extract_vessel_area_density_features(bin_mask))
 
+                    # Update ke state Streamlit
                     extracted_features.update(vessel_features)
                     st.session_state['extracted_features_vessel'] = vessel_features
 
