@@ -20,8 +20,39 @@ import math
 from model_architecture import Build_UNet  # OD/OC
 from vessel_architecture import Build_UNet_Vessel  # VESSEL
 import pickle
+import requests
 
-# ===================== COVER PAGE ===================== #
+# ===================== MODEL DOWNLOADER (GDRIVE) ===================== #
+def download_from_gdrive(file_id, dest_path):
+    URL = "https://docs.google.com/uc?export=download"
+    session = requests.Session()
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    def get_confirm_token(response):
+        for key, value in response.cookies.items():
+            if key.startswith('download_warning'):
+                return value
+        return None
+    token = get_confirm_token(response)
+    if token:
+        params = {'id': file_id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
+    CHUNK_SIZE = 32768
+    with open(dest_path, "wb") as f:
+        for chunk in response.iter_content(CHUNK_SIZE):
+            if chunk:
+                f.write(chunk)
+
+def ensure_models_exist():
+    model_files = [
+        {"file_id": "1AaNBCHRaLJ5mtIWG9bc0dtvDjD9Z1pj7", "dest_path": "models/fix_model_odoc.pt"},
+        {"file_id": "1vDhVgOmJrZslRQ_j_qtE-UuBNNn5aksD", "dest_path": "models/fix_model_vessel.pt"},
+    ]
+    for m in model_files:
+        if not os.path.exists(m["dest_path"]) or os.stat(m["dest_path"]).st_size == 0:
+            st.warning(f"Downloading model {os.path.basename(m['dest_path'])} from Google Drive...")
+            os.makedirs(os.path.dirname(m["dest_path"]), exist_ok=True)
+            download_from_gdrive(m["file_id"], m["dest_path"])
+            st.success(f"Download {os.path.basename(m['dest_path'])} selesai!")
 
 # ===================== COVER PAGE ===================== #
 
