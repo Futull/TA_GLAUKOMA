@@ -33,11 +33,6 @@ def ensure_models_exist():
         {"file_id": "1AaNBCHRaLJ5mtIWG9bc0dtvDjD9Z1pj7", "dest_path": "models/fix_model_odoc.pt"},
         {"file_id": "1vDhVgOmJrZslRQ_j_qtE-UuBNNn5aksD", "dest_path": "models/fix_model_vessel.pt"},
     ]
-    def ensure_models_exist():
-    model_files = [
-        {"file_id": "1AaNBCHRaLJ5mtIWG9bc0dtvDjD9Z1pj7", "dest_path": "models/fix_model_odoc.pt"},
-        {"file_id": "1vDhVgOmJrZslRQ_j_qtE-UuBNNn5aksD", "dest_path": "models/fix_model_vessel.pt"},
-    ]
     for m in model_files:
         if not os.path.exists(m["dest_path"]) or os.stat(m["dest_path"]).st_size == 0:
             # Download without any Streamlit output
