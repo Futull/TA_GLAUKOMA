@@ -1,7 +1,7 @@
 streamlit
 numpy 
 pandas
-opencv-python-headless
+opencv-python-headless 
 matplotlib 
 torchsummary
 scikit-learn
