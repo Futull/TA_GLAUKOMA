@@ -1,8 +1,8 @@
 streamlit
 numpy 
 pandas
-opencv-python-headless
-matplotlib
+opencv-python-headless 
+matplotlib 
 torchsummary
 scikit-learn
 scikit-image
@@ -10,3 +10,4 @@ Pillow
 torch
 torchvision
 scipy
+requests
