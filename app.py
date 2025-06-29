@@ -976,6 +976,7 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded"
     )
+    ensure_models_exist()
     st.sidebar.title("👁 Glaucoma Severity Detection System")
     page = st.sidebar.selectbox("NAVIGATION", [
         "COVER", 
