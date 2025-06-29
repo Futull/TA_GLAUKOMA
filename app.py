@@ -567,7 +567,7 @@ def Detection():
             
             st.image(img_np_od, caption="Original Cropped ONH Image", use_container_width=True)
             
-            if st.button("🟢 Apply OD/OC Preprocessing", key="preprocess_od_oc"):
+            if st.button("START OD/OC PREPOCESSING", key="preprocess_od_oc", type="primary"):
                 with st.spinner("Processing OD/OC preprocessing..."):
                     results = preprocess_od_oc_stepwise(img_np_od)
                     st.session_state['preprocessing_results_od'] = results
@@ -622,7 +622,7 @@ def Detection():
             
             st.image(img_np_vessel, caption="Original Full Fundus Image", use_container_width=True)
             
-            if st.button("🟢 Apply Vessel Preprocessing", key="preprocess_vessel"):
+            if st.button("START VESSEL PREPOCESSING", key="preprocess_vessel", type="primary"):
                 with st.spinner("Processing vessel preprocessing..."):
                     results = preprocess_vessel_stepwise(img_np_vessel)
                     st.session_state['preprocessing_results_vessel'] = results
@@ -685,7 +685,7 @@ def Detection():
                         st.image(st.session_state['colored_segmentation_od'], caption="OD/OC Segmentation")
                         st.success("✅ OD/OC segmentation completed!")
                 
-                if st.button("🟢 Run OD/OC Segmentation", key="segment_od_oc"):
+                if st.button("START OD/OC SEGMENTATION", key="segment_od_oc",  type="primary"):
                     with st.spinner("Running OD/OC segmentation..."):
                         model = load_od_oc_model()
                         
@@ -732,7 +732,7 @@ def Detection():
                         st.image(st.session_state['vessel_mask'], caption="Retina Vessel Segmentation")
                         st.success("✅ Vessel Segmentation Completed!")
                 
-                if st.button("🟢 Run Retina Vessel Segmentation", key="segment_vessel"):
+                if st.button("START VESSEL SEGMENTATION", key="segment_vessel", type="primary"):
                     with st.spinner("Running Retina Vessel Segmentation..."):
                         model = load_vessel_model()
                         
@@ -904,7 +904,7 @@ def Detection():
         missing = set(selected_features) - set(extracted.keys())
         extra = set(extracted.keys()) - set(selected_features)
 
-        if st.button("🧠 Run Classification", key="run_classification", type="primary"):
+        if st.button("🧠 START CLASSIFICATION", key="run_classification", type="primary"):
             with st.spinner("Running SVM classification..."):
                 # Buat dict lokal untuk mapping, supaya session_state tidak berubah
                 features_to_classify = extracted.copy()  # atau extracted_features.copy()
