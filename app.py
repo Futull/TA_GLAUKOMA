@@ -346,14 +346,13 @@ def extract_glcm_features_odoc(image, levels=32):
 
 # ===================== VESSEL GLCM =====================
 def extract_glcm_features_vessel(image, levels=32):
-    green = image[:, :, 1]
-    image_ubyte = img_as_ubyte(green)
+    # image: 2D (grayscale)
+    image_ubyte = img_as_ubyte(image)
     image_quantized = np.clip((image_ubyte / (256 // levels)).astype(np.uint8), 0, levels - 1)
 
     angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
     glcm = graycomatrix(image_quantized, distances=[1], angles=angles,
                         levels=levels, symmetric=True, normed=True)
-
     props = ['contrast', 'correlation', 'energy', 'homogeneity']
     features = {}
     for prop in props:
@@ -829,19 +828,18 @@ def Detection():
                     vessel_mask = st.session_state['vessel_mask']
                     preprocessed_vessel_img = st.session_state['preprocessed_image_vessel']
 
+                    vessel_features = {}
+
                     bin_mask = prepare_vessel_mask(vessel_mask)
                     skeleton = skeletonize(bin_mask).astype(np.uint8)
 
                     # --- Ekstraksi fitur GLCM hanya dari satu channel green ---
                     if preprocessed_vessel_img.ndim == 3:
-                        green_img = preprocessed_vessel_img[..., 0]
+                        green_img = preprocessed_vessel_img[:, :, 1]
                     else:
                         green_img = preprocessed_vessel_img
-                
-                    vessel_features = {}
-
-                    # GLCM features dari green channel
                     glcm_features_vessel = extract_glcm_features_vessel(green_img, levels=32)
+   
                     vessel_features.update(glcm_features_vessel)
 
                     # Tortuosity, bifurcation, vessel length, area/density dari mask/skeleton biner
