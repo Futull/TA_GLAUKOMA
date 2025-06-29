@@ -905,36 +905,27 @@ def Detection():
         extra = set(extracted.keys()) - set(selected_features)
 
         if st.button("🧠 START CLASSIFICATION", key="run_classification", type="primary"):
-            with st.spinner("Running SVM classification..."):
-                # Buat dict lokal untuk mapping, supaya session_state tidak berubah
-                features_to_classify = extracted.copy()  # atau extracted_features.copy()
-                
-                # Cek dan isi fitur yang missing (jika ada)
-                for f in selected_features:
-                    if f not in features_to_classify:
-                        features_to_classify[f] = 0  # atau np.nan
-                
-                # Susun input_vector sesuai urutan selected_features
-                input_vector = [features_to_classify[f] for f in selected_features]
-                
-                # Lanjutkan scaling & prediksi
-                input_array = np.array(input_vector).reshape(1, -1)
-                scaled_input = scaler.transform(input_array)
-                prediction = model.predict(scaled_input)[0]
-                probabilities = model.predict_proba(scaled_input)[0]
+    with st.spinner("Running SVM classification..."):
+        features_to_classify = extracted.copy()
         
-                # ======== END DEBUG ========
+        for f in selected_features:
+            if f not in features_to_classify:
+                features_to_classify[f] = 0
         
-                # (3) Prediksi
-                prediction = model.predict(scaled_input)[0]
-                probabilities = model.predict_proba(scaled_input)[0]
+        input_vector = [features_to_classify[f] for f in selected_features]
+        input_array = np.array(input_vector).reshape(1, -1)
+        scaled_input = scaler.transform(input_array)
+        prediction = model.predict(scaled_input)[0]
+        probabilities = model.predict_proba(scaled_input)[0]
 
-                label_map = {0: "Normal", 1: "Mild", 2: "Moderate", 3: "Severe"}
-                result_label = label_map.get(prediction, "Unknown")
+        label_map = {0: "Normal", 1: "Mild", 2: "Moderate", 3: "Severe"}
+        result_label = label_map.get(prediction, "Unknown")
+        confidence = probabilities[prediction] * 100
 
-                st.session_state['classification_result'] = result_label
+        st.session_state['classification_result'] = result_label
 
-                st.success(f"🧠 Predicted Glaucoma Severity: **{result_label}**")
+        st.success(f"🧠 Predicted Glaucoma Severity: **{result_label}**")
+        st.info(f"🔢 Akurasi prediksi (confidence): **{confidence:.2f}%**")
 
         st.sidebar.markdown("---")
         st.sidebar.subheader("🔄 Progress Tracker")
