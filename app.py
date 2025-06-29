@@ -20,27 +20,13 @@ import math
 from model_architecture import Build_UNet  # OD/OC
 from vessel_architecture import Build_UNet_Vessel  # VESSEL
 import pickle
-import requests
+import gdown
 
 # ===================== MODEL DOWNLOADER (GDRIVE) ===================== #
+
 def download_from_gdrive(file_id, dest_path):
-    URL = "https://docs.google.com/uc?export=download"
-    session = requests.Session()
-    response = session.get(URL, params={'id': file_id}, stream=True)
-    def get_confirm_token(response):
-        for key, value in response.cookies.items():
-            if key.startswith('download_warning'):
-                return value
-        return None
-    token = get_confirm_token(response)
-    if token:
-        params = {'id': file_id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
-    CHUNK_SIZE = 32768
-    with open(dest_path, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk:
-                f.write(chunk)
+    url = f"https://drive.google.com/uc?id={file_id}"
+    gdown.download(url, dest_path, quiet=False)
 
 def ensure_models_exist():
     model_files = [
