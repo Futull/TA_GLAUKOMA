@@ -38,7 +38,15 @@ def ensure_models_exist():
             st.warning(f"Downloading model {os.path.basename(m['dest_path'])} from Google Drive...")
             os.makedirs(os.path.dirname(m["dest_path"]), exist_ok=True)
             download_from_gdrive(m["file_id"], m["dest_path"])
-            st.success(f"Download {os.path.basename(m['dest_path'])} selesai!")
+            size = os.path.getsize(m["dest_path"])
+            st.write(f"Model {os.path.basename(m['dest_path'])} size: {size/1024/1024:.2f} MB")
+            if size < 10000:
+                st.error(f"File {m['dest_path']} terlalu kecil, kemungkinan gagal download (HTML/Quota).")
+                with open(m["dest_path"], 'rb') as f:
+                    head = f.read(200)
+                st.write(head)
+            else:
+                st.success(f"Download {os.path.basename(m['dest_path'])} selesai!")
 
 # ===================== COVER PAGE ===================== #
 
