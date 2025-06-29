@@ -224,7 +224,7 @@ def preprocess_vessel_stepwise(image):
 def load_od_oc_model():
     try:
         model = Build_UNet()
-        model.load_state_dict(torch.load('models/fix_model_odoc.pt', map_location='cpu'))
+        model.load_state_dict(torch.load('models/fix_model_odoc.pt', map_location='cpu', weights_only=False))
         model.eval()
         return model
     except Exception as e:
@@ -234,7 +234,7 @@ def load_od_oc_model():
 def load_vessel_model():
     try:
         model = Build_UNet_Vessel()
-        model.load_state_dict(torch.load('models/fix_model_vessel.pt', map_location='cpu'))
+        model.load_state_dict(torch.load('models/fix_model_vessel.pt', map_location='cpu', weights_only=False))
         model.eval()
         return model
     except Exception as e:
