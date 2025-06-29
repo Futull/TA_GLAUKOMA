@@ -7,7 +7,7 @@ from skimage.filters import gaussian
 from skimage.util import img_as_ubyte
 from skimage.feature import graycomatrix, graycoprops
 import cv2  
-import numpy as np  
+import numpy as np   
 import torch
 from torchvision import transforms
 import matplotlib.pyplot as plt
